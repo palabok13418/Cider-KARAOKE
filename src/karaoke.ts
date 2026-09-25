@@ -221,7 +221,7 @@ export async function ciderPlay(song: Song) {
   throw new Error("Cider Apple Music playback adapter unavailable");
 }
 
-export async function visualFor(song: Song): Promise<{kind:"animated"|"canvas";url:string}|null> {
+export async function visualFor(song: Song): Promise<{kind:"animated"|"canvas"|"static";url:string}> {
   if (song.animatedArtwork) return {kind:"animated" as const,url:song.animatedArtwork};
   const provider = window.CiderSpotifyCanvas?.getCurrentCanvas;
   if (provider) {
@@ -231,7 +231,7 @@ export async function visualFor(song: Song): Promise<{kind:"animated"|"canvas";u
     } catch {}
   }
   if (song.canvas) return {kind:"canvas" as const,url:song.canvas};
-  return null;
+  return {kind:"static" as const,url:song.artwork};
 }
 
 export async function enhanceLyrics(lines: LyricLine[]) {
