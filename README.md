@@ -27,8 +27,8 @@ The development server uses Cider's plugin development port **3058**. Cider's no
 
 The plugin adds a new Immersive Mode layout named **Karaoke**, with a dedicated karaoke queue, four-digit host code, karaoke lyrics, artwork/Canvas visual fallbacks, microphone session transport, and the lightweight WebNN/WebGPU vocal-removal runtime selector.
 
-### Apple Music library
-The karaoke browser now reads the signed-in Apple Music library exposed by Cider's host-backed v3 API. Search is performed against the user's library, and selecting a library song adds it to the karaoke queue. Queue playback goes through Cider's Apple Music store instead of using a separate catalog player.
+### Apple Music catalog
+The karaoke browser searches the full Apple Music catalog through Cider's authenticated host-backed v3 API. There is no separate Apple Music sign-in or developer token in the plugin. Selecting a catalog result adds it to the karaoke queue, and playback goes through Cider's Apple Music store.
 
 The existing Spotify Canvas plugin is kept independent. Cider KARAOKE only calls its `window.CiderSpotifyCanvas.getCurrentCanvas()` integration hook when available.
 
@@ -40,8 +40,12 @@ The Karaoke surface deliberately leaves the upper-left area transparent and non-
 
 
 ## Live Karaoke display
-Press **Start** after selecting a queued song. The operator view switches to a dedicated two-column stage:
+Press **Start** after selecting a queued song. The karaoke surface becomes a transparent two-column stage over Cider's own Immersive Mode background:
 - left: centered album artwork, Apple Music animated artwork, or Spotify Canvas when available;
-- right: karaoke lyrics, with Korean/Japanese/Chinese pronunciation rows and translations.
+- right: karaoke lyrics with Korean/Japanese/Chinese pronunciation rows and translations;
+- no divider is drawn between the two sides;
+- the four-digit host code sits at the top center in a liquid-glass pill.
+
+When karaoke starts, lyrics are fetched in this order: Cider Lyrics Studio user submissions first, then Apple Music lyric TTML through Cider's authenticated API, then the built-in demo fallback. Timed TTML lines are synchronized to Cider's host audio element.
 
 At Start, Cider KARAOKE opens a separate **Player Controls** window for play/pause, previous, and next. It tries to place that window on a secondary display using the browser/Electron Window Placement API when available, with an adjacent-window fallback.
