@@ -32,6 +32,7 @@ export type LyricsSource = "user" | "apple" | "fallback";
 export type LyricsResult = {
   lines: LyricLine[];
   source: LyricsSource;
+  ttml?: string;
 };
 
 export type Signal =
@@ -397,21 +398,23 @@ export async function fetchAppleMusicLyrics(song: Song): Promise<string | null> 
 }
 
 export async function fetchLyricsForSong(song: Song): Promise<LyricsResult> {
-  const userTTML = await fetchUserSubmittedLyrics(song);
-  if (userTTML) {
-    const lines = parseTTML(userTTML);
-    if (lines.length) return {lines,source:"user"};
-  }
-
+  // Cider's Apple Music TTML is the authoritative Sing source.
+  // Keep the original TTML intact so the karaoke surface can use Cider's renderer.
   const appleTTML = await fetchAppleMusicLyrics(song);
   if (appleTTML) {
     const lines = parseTTML(appleTTML);
-    if (lines.length) return {lines,source:"apple"};
+    if (lines.length) return {lines,source:"apple",ttml:appleTTML};
   }
 
-  const fallback = demoLyrics[song.id] || [];
+  // User-submitted TTML remains a compatibility fallback.
+  const userTTML = await fetchUserSubmittedLyrics(song);
+  if (userTTML) {
+    const lines = parseTTML(userTTML);
+    if (lines.length) return {lines,source:"user",ttml:userTTML};
+  }
+
   return {
-    lines: fallback,
+    lines: demoLyrics[song.id] || [],
     source:"fallback"
   };
 }
