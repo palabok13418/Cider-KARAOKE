@@ -151,6 +151,11 @@ function mapLibrarySong(row: any): Song {
   const playId = String(attrs?.playParams?.id || row?.playParams?.id || "");
   const id = String(row?.id || playId);
   const title = attrs?.name || "Untitled";
+  const animatedArtwork =
+    attrs?.editorialVideo?.motionSquareVideo1x1?.video ||
+    attrs?.editorialVideo?.motionWideVideo21x9?.video ||
+    attrs?.editorialVideo?.motionTallVideo3x4?.video ||
+    undefined;
   return {
     id,
     catalogId: playId || undefined,
@@ -158,6 +163,7 @@ function mapLibrarySong(row: any): Song {
     artist: attrs?.artistName || "Unknown artist",
     album: attrs?.albumName,
     artwork: normalizeArtwork(attrs?.artwork?.url || "", 420, 420),
+    animatedArtwork,
     language: guessLanguage(title),
     sing: attrs?.isVocalAttenuationAllowed !== false,
     playHref: playId ? `https://music.apple.com/us/songs/_/${encodeURIComponent(playId)}` : undefined
