@@ -10,6 +10,8 @@ export type Song = {
   artwork: string;
   animatedArtwork?: string;
   canvas?: string;
+  catalogId?: string;
+  playHref?: string;
   language: Language;
   sing?: boolean;
 };
@@ -41,6 +43,9 @@ declare global {
     CiderSpotifyCanvas?: { getCurrentCanvas?: () => string | null | Promise<string | null> };
     CIDER_KARAOKE_SIGNALING_URL?: string;
     __CIDER_KARAOKE_RPC_TOKEN__?: string;
+    CiderApp?: {
+      v3?: (url: string, args?: unknown, opts?: unknown, apiType?: string) => Promise<any>;
+    };
   }
 }
 
@@ -81,17 +86,9 @@ export const demoLyrics: Record<string, LyricLine[]> = {
   ]
 };
 
-export function clientId() {
-  return Math.random().toString(36).slice(2,10);
-}
-
-export function hostCode() {
-  return String(Math.floor(1000 + Math.random() * 9000));
-}
-
-export function signalUrl() {
-  return (import.meta.env.VITE_SIGNALING_URL || window.CIDER_KARAOKE_SIGNALING_URL || "") as string;
-}
+export function clientId() { return Math.random().toString(36).slice(2,10); }
+export function hostCode() { return String(Math.floor(1000 + Math.random() * 9000)); }
+export function signalUrl() { return (import.meta.env.VITE_SIGNALING_URL || window.CIDER_KARAOKE_SIGNALING_URL || "") as string; }
 
 export class Transport {
   private ws: WebSocket | null = null;
@@ -104,9 +101,7 @@ export class Transport {
     if (url) {
       this.ws = new WebSocket(url);
       this.ws.onopen = () => this.flush();
-      this.ws.onmessage = (event) => {
-        try { this.onMessage(JSON.parse(event.data)); } catch {}
-      };
+      this.ws.onmessage = (event) => { try { this.onMessage(JSON.parse(event.data)); } catch {} };
       return;
     }
     if ("BroadcastChannel" in window) {
@@ -119,9 +114,7 @@ export class Transport {
     if (this.ws) {
       if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(message));
       else this.queued.push(message);
-    } else {
-      this.bc?.postMessage(message);
-    }
+    } else this.bc?.postMessage(message);
   }
 
   private flush() {
@@ -129,109 +122,126 @@ export class Transport {
     for (const message of this.queued.splice(0)) this.ws.send(JSON.stringify(message));
   }
 
-  close() {
-    this.ws?.close();
-    this.bc?.close();
-    this.ws = null;
-    this.bc = null;
-    this.queued = [];
+  close() { this.ws?.close(); this.bc?.close(); this.ws = null; this.queued = []; }
+}
+
+function ciderV3() {
+  return (window as any).CiderApp?.v3 as
+    | ((url: string, args?: unknown, opts?: unknown, apiType?: string) => Promise<any>)
+    | undefined;
+}
+
+function normalizeArtwork(url: unknown, width = 420, height = 420) {
+  if (typeof url !== "string" || !url) return "";
+  return url
+    .replace(/\{w\}/g, String(width))
+    .replace(/\{h\}/g, String(height))
+    .replace(/\{f\}/g, "webp");
+}
+
+function guessLanguage(text: string): Language {
+  if (/[\uAC00-\uD7AF]/.test(text)) return "ko";
+  if (/[\u3040-\u30ff]/.test(text)) return "ja";
+  if (/[\u3400-\u9fff]/.test(text)) return "zh";
+  return "en";
+}
+
+function mapLibrarySong(row: any): Song {
+  const attrs = row?.attributes || row || {};
+  const playId = String(attrs?.playParams?.id || row?.playParams?.id || "");
+  const id = String(row?.id || playId);
+  const title = attrs?.name || "Untitled";
+  return {
+    id,
+    catalogId: playId || undefined,
+    title,
+    artist: attrs?.artistName || "Unknown artist",
+    album: attrs?.albumName,
+    artwork: normalizeArtwork(attrs?.artwork?.url || "", 420, 420),
+    language: guessLanguage(title),
+    sing: attrs?.isVocalAttenuationAllowed !== false,
+    playHref: playId ? `https://music.apple.com/us/songs/_/${encodeURIComponent(playId)}` : undefined
+  };
+}
+
+function extractSongRows(payload: any): any[] {
+  const direct = payload?.data?.data;
+  if (Array.isArray(direct)) return direct;
+  const search = payload?.data?.results?.songs?.data;
+  if (Array.isArray(search)) return search;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+async function ciderLibraryRequest(path: string): Promise<Song[]> {
+  const v3 = ciderV3();
+  if (!v3) return [];
+  try {
+    const response = await v3(path);
+    return extractSongRows(response)
+      .filter((row: any) => row?.attributes?.isVocalAttenuationAllowed !== false)
+      .map(mapLibrarySong)
+      .filter((song) => song.artwork || song.playHref || song.id);
+  } catch {
+    return [];
   }
+}
+
+export async function ciderLibrarySongs(limit = 100): Promise<Song[]> {
+  return ciderLibraryRequest(`/v1/me/library/songs?limit=${Math.min(Math.max(limit, 1), 200)}`);
+}
+
+export async function ciderSearch(term: string): Promise<Song[]> {
+  const needle = term.trim();
+  if (!needle) return ciderLibrarySongs();
+  return ciderLibraryRequest(`/v1/me/library/search?term=${encodeURIComponent(needle)}&types=songs&limit=50`);
 }
 
 export async function ciderNowPlaying(): Promise<Song | null> {
   try {
-    const headers = new Headers({"content-type":"application/json"});
-    const token = window.__CIDER_KARAOKE_RPC_TOKEN__;
-    if (token) headers.set("apptoken", token);
-    const response = await fetch("http://localhost:10767/api/v1/playback/now-playing", {headers});
-    if (!response.ok) return null;
-    const data = await response.json();
-    const info = data?.info;
-    if (!info?.playParams?.id) return null;
-    return {
-      id:String(info.playParams.id),
-      title:info.name || "Unknown song",
-      artist:info.artistName || "Unknown artist",
-      album:info.albumName,
-      artwork:info.artwork?.url || "",
-      language:"en"
-    };
+    const item = (window as any).__PLUGINSYS__?.Stores?.appleMusicStore?.nowPlayingItem;
+    if (!item) return null;
+    return mapLibrarySong(item);
   } catch {
     return null;
   }
 }
 
 export async function ciderPlay(song: Song) {
-  const headers = new Headers({"content-type":"application/json"});
-  const token = window.__CIDER_KARAOKE_RPC_TOKEN__;
-  if (token) headers.set("apptoken", token);
-  const response = await fetch("http://localhost:10767/api/v1/playback/play-item", {
-    method:"POST", headers, body:JSON.stringify({type:"songs",id:String(song.id)})
-  });
-  if (!response.ok) throw new Error("Cider playback unavailable");
-}
-
-export async function ciderSearch(term: string): Promise<Song[]> {
-  try {
-    const headers = new Headers({"content-type":"application/json"});
-    const token = window.__CIDER_KARAOKE_RPC_TOKEN__;
-    if (token) headers.set("apptoken", token);
-    const path = "/v1/catalog/us/search?term="+encodeURIComponent(term)+"&types=songs&limit=12";
-    const response = await fetch("http://localhost:10767/api/v1/amapi/run-v3", {
-      method:"POST",headers,body:JSON.stringify({path})
-    });
-    if (!response.ok) return [];
-    const data = await response.json();
-    const rows = Array.isArray(data?.data?.results?.songs?.data) ? data.data.results.songs.data : [];
-    const singRows = rows.filter((row: any) => row.attributes?.isVocalAttenuationAllowed !== false);\n    return singRows.map((row: any) => ({
-      id:String(row.id),
-      title:row.attributes?.name || "Untitled",
-      artist:row.attributes?.artistName || "Unknown artist",
-      album:row.attributes?.albumName,
-      artwork:row.attributes?.artwork?.url || "",
-      language:"en" as Language,
-      sing:true
-    }));
-  } catch {
-    return [];
+  const store = (window as any).__PLUGINSYS__?.Stores?.appleMusicStore;
+  const href = song.playHref || (song.catalogId ? `https://music.apple.com/us/songs/_/${encodeURIComponent(song.catalogId)}` : undefined);
+  if (href && store?.playItemByHref) {
+    await store.playItemByHref(href);
+    return;
   }
+  if (song.id && store?.player?.playItemByID) {
+    await store.player.playItemByID(song.id);
+    return;
+  }
+  throw new Error("Cider Apple Music playback adapter unavailable");
 }
 
 export async function visualFor(song: Song) {
   if (song.animatedArtwork) return {kind:"animated" as const,url:song.animatedArtwork};
   const provider = window.CiderSpotifyCanvas?.getCurrentCanvas;
-  if (provider) {
-    try {
-      const url = await provider();
-      if (url) return {kind:"canvas" as const,url};
-    } catch {}
-  }
+  if (provider) { try { const url = await provider(); if (url) return {kind:"canvas" as const,url}; } catch {} }
   if (song.canvas) return {kind:"canvas" as const,url:song.canvas};
   return {kind:"static" as const,url:song.artwork};
 }
 
 export async function enhanceLyrics(lines: LyricLine[]) {
   const pronunciation: Record<string,string> = {
-    "별빛 아래 함께 노래해":"byeolbit arae hamkke noraehae",
-    "우리의 밤이 시작돼":"uriui bami sijakdwae",
-    "夜のメロディを歌おう":"yoru no merodi o utaou",
-    "光の中で笑おう":"hikari no naka de waraou",
-    "一起唱歌吧":"yì qǐ chàng gē ba",
-    "我爱你们":"wǒ ài nǐ men"
+    "별빛 아래 함께 노래해":"byeolbit arae hamkke noraehae", "우리의 밤이 시작돼":"uriui bami sijakdwae",
+    "夜のメロディを歌おう":"yoru no merodi o utaou", "光の中で笑おう":"hikari no naka de waraou",
+    "一起唱歌吧":"yì qǐ chàng gē ba", "我爱你们":"wǒ ài nǐ men"
   };
   const translations: Record<string,string> = {
-    "별빛 아래 함께 노래해":"Let's sing together under the starlight",
-    "우리의 밤이 시작돼":"Our night is beginning",
-    "夜のメロディを歌おう":"Let's sing the melody of the night",
-    "光の中で笑おう":"Let's smile in the light",
-    "一起唱歌吧":"Let's sing together",
-    "我爱你们":"I love you all"
+    "별빛 아래 함께 노래해":"Let's sing together under the starlight", "우리의 밤이 시작돼":"Our night is beginning",
+    "夜のメロディを歌おう":"Let's sing the melody of the night", "光の中で笑おう":"Let's smile in the light",
+    "一起唱歌吧":"Let's sing together", "我爱你们":"I love you all"
   };
-  return lines.map((line) => ({
-    ...line,
-    translation:line.translation || translations[line.original] || line.original,
-    pronunciation:["ko","ja","zh"].includes(line.language) ? line.pronunciation || pronunciation[line.original] : undefined
-  }));
+  return lines.map((line) => ({...line, translation:line.translation || translations[line.original] || line.original,
+    pronunciation:["ko","ja","zh"].includes(line.language) ? line.pronunciation || pronunciation[line.original] : undefined}));
 }
 
 export async function vocalRuntime() {
