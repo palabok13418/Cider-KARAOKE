@@ -26,6 +26,7 @@ const vocal = ref({mode:"fallback",message:"Starting local vocal remover…",loa
 const searchBusy = ref(false);
 const activeIndex = ref(0);
 const lyricsSource = ref<LyricsSource>("fallback");
+const lyricsXml = ref("");
 const lyricsBusy = ref(false);
 const transport = ref<Transport | null>(null);
 let lyricSyncFrame = 0;
@@ -49,6 +50,7 @@ async function loadLyrics(song: Song) {
   lyricsBusy.value = true;
   try {
     const result = await fetchLyricsForSong(song);
+    lyricsXml.value = result.ttml || "";
     lines.value = await enhanceLyrics(result.lines);
     lyricsSource.value = result.source;
     activeIndex.value = 0;
@@ -375,12 +377,38 @@ onBeforeUnmount(() => {
 
       <section class="karaoke-lyrics-panel">
         <div class="karaoke-lyrics">
-          <div v-if="lyricsBusy && !lines.length" class="lyrics-loading">Loading lyrics…</div>
-          <article v-for="(line,index) in lines" :key="line.id" class="lyric-line-live" :class="{active:index===activeIndex,past:index<activeIndex}">
-            <div class="original">{{ line.original }}</div>
-            <div v-if="line.pronunciation" class="pronunciation">{{ line.pronunciation }}</div>
-            <div v-if="line.translation && line.language !== 'en'" class="translation">{{ line.translation }}</div>
-          </article>
+          <div v-if="lyricsBusy && !lyricsXml" class="lyrics-loading">Loading Apple Music Sing lyrics…</div>
+
+          <div v-if="lyricsXml" class="cider-karaoke-ttml-shell">
+            <cider-simple-lyric-view
+              class="cider-karaoke-ttml-renderer"
+              :lyrics-xml="lyricsXml"
+            ></cider-simple-lyric-view>
+
+            <div v-if="lines[activeIndex]" class="karaoke-lyric-enhancements" aria-live="polite">
+              <div
+                v-if="lines[activeIndex].pronunciation"
+                class="karaoke-pronunciation"
+              >{{ lines[activeIndex].pronunciation }}</div>
+              <div
+                v-if="lines[activeIndex].translation && lines[activeIndex].language !== 'en'"
+                class="karaoke-translation"
+              >{{ lines[activeIndex].translation }}</div>
+            </div>
+          </div>
+
+          <div v-else class="karaoke-lyrics-fallback">
+            <article
+              v-for="(line,index) in lines"
+              :key="line.id"
+              class="lyric-line-live"
+              :class="{active:index===activeIndex,past:index<activeIndex}"
+            >
+              <div class="original">{{ line.original }}</div>
+              <div v-if="line.pronunciation" class="pronunciation">{{ line.pronunciation }}</div>
+              <div v-if="line.translation && line.language !== 'en'" class="translation">{{ line.translation }}</div>
+            </article>
+          </div>
         </div>
       </section>
     </div>
