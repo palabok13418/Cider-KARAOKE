@@ -38,6 +38,9 @@ Local translation, pronunciation, vocal separation, WebRTC signaling, and the Sp
 
 The Karaoke surface deliberately leaves the upper-left area transparent and non-interactive so Cider's own Immersive Mode controls, including the layout selector, remain clickable.
 
+### Cider Sing lyric renderer
+KARAOKE keeps Cider's Apple Music Sing TTML intact and renders it through Cider's exposed `cider-simple-lyric-view` component. The plugin only adds a presentation layer around that renderer: its own translation engine and Korean/Japanese/Chinese pronunciation engine are shown alongside the active Cider-rendered line. This keeps Cider's per-line/per-word timing and Sing behavior as the rendering foundation instead of reimplementing the TTML renderer.
+
 
 ## Live Karaoke display
 Press **Start** after selecting a queued song. The karaoke surface becomes a transparent two-column stage over Cider's own Immersive Mode background:
