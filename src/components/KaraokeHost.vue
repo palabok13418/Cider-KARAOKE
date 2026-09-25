@@ -37,10 +37,10 @@ function addToQueue(song: Song) {
   status.value = "Selected " + song.title + ". Press Start when you are ready.";
 }
 
-async function stageSong(song: Song) {
+async function stageSong(song: Song, fetchVisual = true) {
   current.value = song;
   lines.value = await enhanceLyrics(demoLyrics[song.id] || [{id:"fallback",original:"Ready to sing",language:"en",translation:"Ready to sing"}]);
-  visual.value = await visualFor(song);
+  if (fetchVisual) visual.value = await visualFor(song);
   activeIndex.value = 0;
 }
 
@@ -67,9 +67,13 @@ async function handlePlayerCommand(type: "ready" | "toggle" | "previous" | "next
   if (type === "toggle") {
     if (!store) return;
     try {
-      if (store.isPlaying) await store.pause();
-      else await store.play();
-      playing.value = Boolean(store.isPlaying);
+      if (store.isPlaying) {
+        await store.pause();
+        playing.value = false;
+      } else {
+        await store.play();
+        playing.value = true;
+      }
     } catch {}
     await syncPlayerControls();
     return;
@@ -117,7 +121,7 @@ async function startKaraoke() {
     return;
   }
 
-  await stageSong(target);
+  await stageSong(target, false);
 
   try {
     playerControls = await openPlayerControls(
@@ -141,16 +145,20 @@ async function startKaraoke() {
 }
 
 async function playSelected(song: Song, remove = false) {
-  await stageSong(song);
+  await stageSong(song, false);
   status.value = "Now singing: " + song.title;
   if (props.hostMode === "cider") {
     try {
       await ciderPlay(song);
       playing.value = true;
+      visual.value = await visualFor(song);
     } catch {
       playing.value = false;
+      visual.value = await visualFor(song);
       status.value = "Previewing " + song.title + ". Cider playback adapter needs access.";
     }
+  } else {
+    visual.value = await visualFor(song);
   }
   if (remove) {
     const index = queue.value.findIndex((item) => item.id === song.id);
