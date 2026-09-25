@@ -37,3 +37,11 @@ The existing Spotify Canvas plugin is kept independent. Cider KARAOKE only calls
 Local translation, pronunciation, vocal separation, WebRTC signaling, and the Spotify Canvas integration are still prototype-level pieces. No proprietary vocal-removal model weights are included in this package.
 
 The Karaoke surface deliberately leaves the upper-left area transparent and non-interactive so Cider's own Immersive Mode controls, including the layout selector, remain clickable.
+
+
+## Live Karaoke display
+Press **Start** after selecting a queued song. The operator view switches to a dedicated two-column stage:
+- left: centered album artwork, Apple Music animated artwork, or Spotify Canvas when available;
+- right: karaoke lyrics, with Korean/Japanese/Chinese pronunciation rows and translations.
+
+At Start, Cider KARAOKE opens a separate **Player Controls** window for play/pause, previous, and next. It tries to place that window on a secondary display using the browser/Electron Window Placement API when available, with an adjacent-window fallback.
