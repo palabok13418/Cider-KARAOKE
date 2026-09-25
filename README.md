@@ -52,3 +52,9 @@ Press **Start** after selecting a queued song. The karaoke surface becomes a tra
 When karaoke starts, lyrics are fetched in this order: Cider Lyrics Studio user submissions first, then Apple Music lyric TTML through Cider's authenticated API, then the built-in demo fallback. Timed TTML lines are synchronized to Cider's host audio element.
 
 At Start, Cider KARAOKE opens a separate **Player Controls** window for play/pause, previous, and next. It tries to place that window on a secondary display using the browser/Electron Window Placement API when available, with an adjacent-window fallback.
+
+
+### Apple Music home picker and playback control
+Before karaoke starts, the picker uses Cider-native Apple Music media components and personalized Apple Music recommendations from the already-authenticated Cider session, rather than a separate Apple Music login. Catalog search remains available as a fallback.
+
+Starting karaoke takes control of Cider's Apple Music player: the plugin ensures the player exists, selects the requested catalog track through Cider, explicitly resumes playback, and the separate Player Controls window controls Cider's play/pause/next/previous transport. KARAOKE does not create a second audio player or use a local preview stream.
