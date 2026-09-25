@@ -13,6 +13,7 @@ const lines = ref<Awaited<ReturnType<typeof enhanceLyrics>>>([]);
 const visual = ref<{kind:"animated"|"canvas"|"static";url:string}|null>(null);
 const query = ref("");
 const results = ref<Song[]>([]);
+const selectedSong = ref<Song | null>(null);
 const code = ref(hostCode());
 const libraryBusy = ref(true);
 const libraryMessage = ref("Loading your Apple Music library…");
@@ -26,13 +27,32 @@ const peers = new Map<string, RTCPeerConnection>();
 let micAudio: HTMLAudioElement | null = null;
 const me = clientId();
 
-function addToQueue(song: Song) { queue.value.push({...song,queueId:Math.random().toString(36).slice(2)}); status.value = "Added " + song.title + " to the karaoke queue."; }
+function addToQueue(song: Song) {
+  queue.value.push({...song,queueId:Math.random().toString(36).slice(2)});
+  selectedSong.value = song;
+  status.value = "Selected " + song.title + ". Press Start when you are ready.";
+}
 
-async function playSelected(song: Song, remove = false) {
+async function stageSong(song: Song) {
   current.value = song;
   lines.value = await enhanceLyrics(demoLyrics[song.id] || [{id:"fallback",original:"Ready to sing",language:"en",translation:"Ready to sing"}]);
   visual.value = await visualFor(song);
   activeIndex.value = 0;
+}
+
+async function startKaraoke() {
+  const target = selectedSong.value || queue.value[0] || current.value;
+  if (!target) {
+    status.value = "Choose a song first.";
+    return;
+  }
+  const queued = queue.value.some((item) => item.id === target.id);
+  await playSelected(target, queued);
+  selectedSong.value = null;
+}
+
+async function playSelected(song: Song, remove = false) {
+  await stageSong(song);
   status.value = "Now singing: " + song.title;
   if (props.hostMode === "cider") {
     try { await ciderPlay(song); } catch { status.value = "Previewing " + song.title + ". Cider playback adapter needs access."; }
@@ -110,8 +130,8 @@ onMounted(async () => {
   vocal.value = await vocalRuntime();
   await loadLibrary();
   const now = props.hostMode === "cider" ? await ciderNowPlaying() : null;
-  if (now) await playSelected(now);
-  else if (results.value[0]) await playSelected(results.value[0]);
+  if (now) await stageSong(now);
+  else if (results.value[0]) await stageSong(results.value[0]);
 });
 
 onBeforeUnmount(() => { transport.value?.close(); peers.forEach((peer) => peer.close()); micAudio?.remove(); });
@@ -119,11 +139,6 @@ onBeforeUnmount(() => { transport.value?.close(); peers.forEach((peer) => peer.c
 
 <template>
   <main class="host-shell">
-    <header class="host-header">
-      <div class="host-brand"><span class="brand-mark">🎤</span><div><span class="eyebrow">CIDER KARAOKE</span><strong>{{ props.hostMode === "cider" ? "Karaoke" : "Web Host" }}</strong></div></div>
-      <div class="host-code"><small>HOST CODE</small><strong>{{ code }}</strong></div>
-      <div class="host-status"><span class="signal"><i></i>{{ micCount }} mic{{ micCount === 1 ? "" : "s" }}</span><span>{{ status }}</span></div>
-    </header>
     <div class="host-body">
       <section class="main-stage">
         <div v-if="visual" class="visual-backdrop" :style="{backgroundImage:'url('+visual.url+')'}"></div>
@@ -157,9 +172,13 @@ onBeforeUnmount(() => { transport.value?.close(); peers.forEach((peer) => peer.c
         </section>
       </section>
       <aside class="queue-panel">
-        <div class="queue-title"><div><span class="eyebrow">UP NEXT</span><h3>Karaoke Queue</h3></div><span class="queue-count">{{ queue.length }}</span></div>
+        <div class="host-code-mini"><span class="eyebrow">HOST CODE</span><strong>{{ code }}</strong><small>{{ micCount }} connected mic{{ micCount === 1 ? "" : "s" }}</small></div>
+        <div class="queue-title">
+          <div><span class="eyebrow">UP NEXT</span><h3>Karaoke Queue</h3></div>
+          <div class="queue-actions"><button class="start-btn" type="button" :disabled="!selectedSong && !queue.length && !current" @click="startKaraoke">Start</button><span class="queue-count">{{ queue.length }}</span></div>
+        </div>
         <div class="queue-list">
-          <button v-for="song in queue" :key="song.queueId" class="queue-item" @click="playSelected(song,true)"><img :src="song.artwork" :alt="song.title" /><span class="queue-copy"><strong>{{ song.title }}</strong><small>{{ song.artist }}</small></span><span class="remove" @click.stop="removeQueue(song.queueId)">×</span></button>
+          <button v-for="song in queue" :key="song.queueId" class="queue-item" :class="{selected:selectedSong?.id === song.id}" @click="selectedSong = song; status = 'Selected ' + song.title + '. Press Start when you are ready.'"><img :src="song.artwork" :alt="song.title" /><span class="queue-copy"><strong>{{ song.title }}</strong><small>{{ song.artist }}</small></span><span class="remove" @click.stop="removeQueue(song.queueId)">×</span></button>
           <div v-if="!queue.length" class="queue-empty">Add songs from the browser and they will appear here.</div>
         </div>
       </aside>
