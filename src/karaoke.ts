@@ -224,6 +224,45 @@ async function ciderMusicRequest(path: string): Promise<any | null> {
   }
 }
 
+function collectSongResources(value: any, seen = new Set<any>(), out: any[] = []): any[] {
+  if (!value || typeof value !== "object" || seen.has(value)) return out;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const item of value) collectSongResources(item, seen, out);
+    return out;
+  }
+  const type = String(value.type || "").toLowerCase();
+  if (type === "songs" || type === "song" || type === "library-songs") {
+    const rows = Array.isArray(value.data) ? value.data : [value];
+    for (const row of rows) {
+      const rowType = String(row?.type || "").toLowerCase();
+      if (rowType === "songs" || rowType === "song" || rowType === "library-songs") out.push(row);
+    }
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (["meta","links","href"].includes(key)) continue;
+    collectSongResources(child, seen, out);
+  }
+  return out;
+}
+
+export async function ciderHomeSongs(limit = 40): Promise<{songs: Song[]; resources: any[]}> {
+  const response = await ciderMusicRequest(
+    "/v1/me/recommendations?limit=" + Math.min(Math.max(limit, 1), 100)
+  );
+  const resources = collectSongResources(response);
+  const unique = new Map<string, any>();
+  for (const resource of resources) {
+    const id = String(resource?.id || resource?.attributes?.playParams?.id || "");
+    if (id && !unique.has(id)) unique.set(id, resource);
+  }
+  const trimmed = Array.from(unique.values()).slice(0, limit);
+  return {
+    resources: trimmed,
+    songs: trimmed.map(mapSong).filter((song) => song.artwork || song.playHref || song.id)
+  };
+}
+
 export async function ciderCatalogSearch(term: string): Promise<Song[]> {
   const needle = term.trim();
   if (!needle) return [];
@@ -264,19 +303,31 @@ export async function ciderNowPlaying(): Promise<Song | null> {
 
 export async function ciderPlay(song: Song) {
   const store = (window as any).__PLUGINSYS__?.Stores?.appleMusicStore;
-  const href = song.playHref || (song.catalogId ? "https://music.apple.com/us/songs/_/" + encodeURIComponent(song.catalogId) : undefined);
+  if (!store) throw new Error("Cider Apple Music playback adapter unavailable");
 
-  if (href && store?.playItemByHref) {
+  if (store.ensurePlayer) {
+    await store.ensurePlayer();
+  }
+
+  const href = song.playHref || (song.catalogId
+    ? "https://music.apple.com/us/songs/_/" + encodeURIComponent(song.catalogId)
+    : undefined);
+
+  if (href && store.playItemByHref) {
     await store.playItemByHref(href);
-    return;
-  }
-
-  if (song.id && store?.player?.playItemByID) {
+  } else if (song.catalogId && store.player?.playItemByID) {
+    await store.player.playItemByID(song.catalogId);
+  } else if (song.id && store.player?.playItemByID) {
     await store.player.playItemByID(song.id);
-    return;
+  } else {
+    throw new Error("Cider Apple Music playback adapter unavailable");
   }
 
-  throw new Error("Cider Apple Music playback adapter unavailable");
+  // Cider owns the real Apple Music audio element. Explicitly resume it
+  // after selecting the track so Karaoke never falls back to a local preview.
+  if (!store.isPlaying && store.play) {
+    await store.play();
+  }
 }
 
 export async function visualFor(song: Song): Promise<{kind:"animated"|"canvas"|"static";url:string}> {
