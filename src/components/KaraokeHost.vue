@@ -65,7 +65,7 @@ function onMessage(message: Signal) {
     status.value = "Host ready. Share the four-digit code.";
     return;
   }
-  if (message.type === "join-room" && !signalUrl()) {
+  if (message.type === "join-room" && !signalUrl() && message.code === code.value) {
     micCount.value += 1;
     transport.value?.send({type:"join-accepted",hostId:me});
     transport.value?.send({type:"peer-joined",peerId:message.clientId});
