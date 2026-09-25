@@ -24,6 +24,14 @@ export type LyricLine = {
   language: Language;
   translation?: string;
   pronunciation?: string;
+  startTime?: number;
+};
+
+export type LyricsSource = "user" | "apple" | "fallback";
+
+export type LyricsResult = {
+  lines: LyricLine[];
+  source: LyricsSource;
 };
 
 export type Signal =
@@ -146,68 +154,108 @@ function guessLanguage(text: string): Language {
   return "en";
 }
 
-function mapLibrarySong(row: any): Song {
+function decodeCiderEntities(value: string) {
+  return value
+    .replace(/&(amp|lt|gt|quot|apos|#39);/g, (_, entity) => ({
+      amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", "#39": "'"
+    } as Record<string, string>)[entity] || entity);
+}
+
+function mapSong(row: any): Song {
   const attrs = row?.attributes || row || {};
-  const playId = String(attrs?.playParams?.id || row?.playParams?.id || "");
+  const playId = String(attrs?.playParams?.id || row?.playParams?.id || row?.id || "");
   const id = String(row?.id || playId);
-  const title = attrs?.name || "Untitled";
+  const title = decodeCiderEntities(String(attrs?.name || "Untitled"));
   const animatedArtwork =
     attrs?.editorialVideo?.motionSquareVideo1x1?.video ||
     attrs?.editorialVideo?.motionWideVideo21x9?.video ||
     attrs?.editorialVideo?.motionTallVideo3x4?.video ||
     undefined;
+
   return {
     id,
     catalogId: playId || undefined,
     title,
-    artist: attrs?.artistName || "Unknown artist",
-    album: attrs?.albumName,
+    artist: decodeCiderEntities(String(attrs?.artistName || "Unknown artist")),
+    album: attrs?.albumName ? decodeCiderEntities(String(attrs.albumName)) : undefined,
     artwork: normalizeArtwork(attrs?.artwork?.url || "", 420, 420),
     animatedArtwork,
     language: guessLanguage(title),
     sing: attrs?.isVocalAttenuationAllowed !== false,
-    playHref: playId ? `https://music.apple.com/us/songs/_/${encodeURIComponent(playId)}` : undefined
+    playHref: attrs?.url || (playId ? "https://music.apple.com/us/songs/_/" + encodeURIComponent(playId) : undefined)
   };
 }
 
 function extractSongRows(payload: any): any[] {
   const direct = payload?.data?.data;
   if (Array.isArray(direct)) return direct;
-  const search = payload?.data?.results?.songs?.data;
-  if (Array.isArray(search)) return search;
+  const searchSongs = payload?.data?.results?.songs?.data;
+  if (Array.isArray(searchSongs)) return searchSongs;
+  const catalogSongs = payload?.results?.songs?.data;
+  if (Array.isArray(catalogSongs)) return catalogSongs;
   if (Array.isArray(payload?.data)) return payload.data;
   return [];
 }
 
-async function ciderLibraryRequest(path: string): Promise<Song[]> {
+async function ciderStorefront(): Promise<string> {
+  const known = String((window as any).__PLUGINSYS__?.Stores?.appleMusicStore?.storefrontId || "").trim();
+  if (known) return known;
+
   const v3 = ciderV3();
-  if (!v3) return [];
+  if (v3) {
+    try {
+      const response = await v3("/v1/me/storefront");
+      const id = response?.data?.data?.[0]?.id || response?.data?.[0]?.id || response?.data?.id;
+      if (id) return String(id);
+    } catch {}
+  }
+
+  return "us";
+}
+
+async function ciderMusicRequest(path: string): Promise<any | null> {
+  const v3 = ciderV3();
+  if (!v3) return null;
   try {
-    const response = await v3(path);
-    return extractSongRows(response)
-      .filter((row: any) => row?.attributes?.isVocalAttenuationAllowed !== false)
-      .map(mapLibrarySong)
-      .filter((song) => song.artwork || song.playHref || song.id);
+    return await v3(path);
   } catch {
-    return [];
+    return null;
   }
 }
 
+export async function ciderCatalogSearch(term: string): Promise<Song[]> {
+  const needle = term.trim();
+  if (!needle) return [];
+
+  const storefront = await ciderStorefront();
+  const response = await ciderMusicRequest(
+    "/v1/catalog/" + encodeURIComponent(storefront) +
+    "/search?term=" + encodeURIComponent(needle) +
+    "&types=songs&limit=50&extend=editorialArtwork,editorialVideo"
+  );
+
+  return extractSongRows(response)
+    .map(mapSong)
+    .filter((song) => song.artwork || song.playHref || song.id);
+}
+
 export async function ciderLibrarySongs(limit = 100): Promise<Song[]> {
-  return ciderLibraryRequest(`/v1/me/library/songs?limit=${Math.min(Math.max(limit, 1), 200)}`);
+  const response = await ciderMusicRequest("/v1/me/library/songs?limit=" + Math.min(Math.max(limit, 1), 200));
+  return extractSongRows(response)
+    .filter((row: any) => row?.attributes?.isVocalAttenuationAllowed !== false)
+    .map(mapSong)
+    .filter((song) => song.artwork || song.playHref || song.id);
 }
 
 export async function ciderSearch(term: string): Promise<Song[]> {
-  const needle = term.trim();
-  if (!needle) return ciderLibrarySongs();
-  return ciderLibraryRequest(`/v1/me/library/search?term=${encodeURIComponent(needle)}&types=songs&limit=50`);
+  return ciderCatalogSearch(term);
 }
 
 export async function ciderNowPlaying(): Promise<Song | null> {
   try {
     const item = (window as any).__PLUGINSYS__?.Stores?.appleMusicStore?.nowPlayingItem;
     if (!item) return null;
-    return mapLibrarySong(item);
+    return mapSong(item);
   } catch {
     return null;
   }
@@ -215,20 +263,24 @@ export async function ciderNowPlaying(): Promise<Song | null> {
 
 export async function ciderPlay(song: Song) {
   const store = (window as any).__PLUGINSYS__?.Stores?.appleMusicStore;
-  const href = song.playHref || (song.catalogId ? `https://music.apple.com/us/songs/_/${encodeURIComponent(song.catalogId)}` : undefined);
+  const href = song.playHref || (song.catalogId ? "https://music.apple.com/us/songs/_/" + encodeURIComponent(song.catalogId) : undefined);
+
   if (href && store?.playItemByHref) {
     await store.playItemByHref(href);
     return;
   }
+
   if (song.id && store?.player?.playItemByID) {
     await store.player.playItemByID(song.id);
     return;
   }
+
   throw new Error("Cider Apple Music playback adapter unavailable");
 }
 
 export async function visualFor(song: Song): Promise<{kind:"animated"|"canvas"|"static";url:string}> {
   if (song.animatedArtwork) return {kind:"animated" as const,url:song.animatedArtwork};
+
   const provider = window.CiderSpotifyCanvas?.getCurrentCanvas;
   if (provider) {
     try {
@@ -236,8 +288,132 @@ export async function visualFor(song: Song): Promise<{kind:"animated"|"canvas"|"
       if (url) return {kind:"canvas" as const,url};
     } catch {}
   }
+
   if (song.canvas) return {kind:"canvas" as const,url:song.canvas};
   return {kind:"static" as const,url:song.artwork};
+}
+
+function parseTimestamp(value: string | null | undefined) {
+  if (!value) return NaN;
+  const clean = value.trim().replace(/s$/, "");
+  return clean.split(":").reduce((acc, part) => acc * 60 + Number.parseFloat(part), 0);
+}
+
+export function parseTTML(ttml: string): LyricLine[] {
+  const xml = decodeCiderEntities(ttml);
+  const lines: LyricLine[] = [];
+
+  try {
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    const nodes = Array.from(doc.querySelectorAll("p"));
+
+    nodes.forEach((node, index) => {
+      const original = (node.textContent || "").replace(/\s+/g, " ").trim();
+      if (!original) return;
+
+      const startTime = parseTimestamp(node.getAttribute("begin"));
+      lines.push({
+        id: String(index + 1),
+        original,
+        language: guessLanguage(original),
+        startTime: Number.isFinite(startTime) ? startTime : undefined
+      });
+    });
+  } catch {}
+
+  if (lines.length) return lines;
+
+  for (const match of xml.matchAll(/<p\b[^>]*\bbegin="([^"]+)"[^>]*>([\s\S]*?)<\/p>/g)) {
+    const original = decodeCiderEntities(match[2].replace(/<[^>]*>/g, ""))
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!original) continue;
+
+    const startTime = parseTimestamp(match[1]);
+    lines.push({
+      id: String(lines.length + 1),
+      original,
+      language: guessLanguage(original),
+      startTime: Number.isFinite(startTime) ? startTime : undefined
+    });
+  }
+
+  return lines;
+}
+
+type StudioLyric = { ttml?: string; score?: number; [key: string]: unknown };
+
+export async function fetchUserSubmittedLyrics(song: Song): Promise<string | null> {
+  if (!song.catalogId) return null;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const response = await fetch(
+      "https://exp-rise.cider.sh/api/v1/lyrics/user/" + encodeURIComponent(song.catalogId) + "/all",
+      { method: "GET", cache: "no-store", signal: controller.signal }
+    );
+
+    if (!response.ok) return null;
+
+    const payload = await response.json() as { lyrics?: StudioLyric[] };
+    const candidates = Array.isArray(payload?.lyrics) ? payload.lyrics : [];
+
+    candidates.sort((a, b) => Number(b?.score || 0) - Number(a?.score || 0));
+    const ttml = candidates.find((item) => typeof item?.ttml === "string" && item.ttml.trim())?.ttml;
+
+    return ttml || null;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+export async function fetchAppleMusicLyrics(song: Song): Promise<string | null> {
+  if (!song.catalogId) return null;
+
+  const storefront = await ciderStorefront();
+  const response = await ciderMusicRequest(
+    "/v1/catalog/" + encodeURIComponent(storefront) +
+    "/songs/" + encodeURIComponent(song.catalogId) + "/lyrics"
+  );
+
+  const rows = response?.data?.data || response?.data || [];
+  const first = Array.isArray(rows) ? rows[0] : rows;
+  const attributes = first?.attributes || {};
+  const direct = typeof attributes.ttml === "string" ? attributes.ttml : null;
+
+  if (direct) return direct;
+
+  const localizations = attributes.ttmlLocalizations;
+  if (localizations && typeof localizations === "object") {
+    const localized = Object.values(localizations).find((value) => typeof value === "string" && value.trim());
+    if (typeof localized === "string") return localized;
+  }
+
+  return null;
+}
+
+export async function fetchLyricsForSong(song: Song): Promise<LyricsResult> {
+  const userTTML = await fetchUserSubmittedLyrics(song);
+  if (userTTML) {
+    const lines = parseTTML(userTTML);
+    if (lines.length) return {lines,source:"user"};
+  }
+
+  const appleTTML = await fetchAppleMusicLyrics(song);
+  if (appleTTML) {
+    const lines = parseTTML(appleTTML);
+    if (lines.length) return {lines,source:"apple"};
+  }
+
+  const fallback = demoLyrics[song.id] || [];
+  return {
+    lines: fallback,
+    source:"fallback"
+  };
 }
 
 export async function enhanceLyrics(lines: LyricLine[]) {
@@ -251,8 +427,25 @@ export async function enhanceLyrics(lines: LyricLine[]) {
     "夜のメロディを歌おう":"Let's sing the melody of the night", "光の中で笑おう":"Let's smile in the light",
     "一起唱歌吧":"Let's sing together", "我爱你们":"I love you all"
   };
-  return lines.map((line) => ({...line, translation:line.translation || translations[line.original] || line.original,
-    pronunciation:["ko","ja","zh"].includes(line.language) ? line.pronunciation || pronunciation[line.original] : undefined}));
+
+  return lines.map((line) => ({
+    ...line,
+    translation: line.translation || translations[line.original] || line.original,
+    pronunciation:["ko","ja","zh"].includes(line.language) ? line.pronunciation || pronunciation[line.original] : undefined
+  }));
+}
+
+export function getHostAudioElement(): HTMLAudioElement | null {
+  const storeAudio = (window as any).__PLUGINSYS__?.Stores?.appleMusicStore?.audioElement;
+  if (storeAudio && typeof storeAudio.currentTime === "number") return storeAudio;
+  const fallback = document.querySelector("audio");
+  return fallback instanceof HTMLAudioElement ? fallback : null;
+}
+
+export function getPlaybackTime() {
+  const audio = getHostAudioElement();
+  const time = audio?.currentTime;
+  return typeof time === "number" && Number.isFinite(time) ? time : 0;
 }
 
 export async function vocalRuntime() {
