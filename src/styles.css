@@ -44,3 +44,17 @@
   .karaoke-lyrics-panel{min-height:48vh;padding:26px 24px 40px}
   .karaoke-lyrics{min-height:42vh}
 }
+
+/* Apple Music / Cider native home picker */
+.apple-music-home-picker{overflow:auto}
+.home-subtitle{margin:6px 0 0;color:var(--muted);font-size:12px;max-width:620px}
+.home-shelf{margin-top:8px}
+.home-shelf-header{display:flex;align-items:end;justify-content:space-between;margin-bottom:10px}
+.home-shelf-header h3{margin:4px 0 0;font-size:18px}
+.home-shelf-row{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(190px,230px);gap:14px;overflow-x:auto;padding:2px 2px 14px;scrollbar-width:thin}
+.home-native-card{min-width:0;padding:0;border:0;background:transparent;color:inherit;text-align:left;border-radius:18px;cursor:pointer;transition:transform .18s ease,background .18s ease}
+.home-native-card:hover{transform:translateY(-2px);background:rgba(255,255,255,.035)}
+.home-native-card cider-media-item{display:block;pointer-events:none}
+.home-fallback-card{display:block}
+.home-fallback-card img{display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:14px;margin-bottom:8px}
+.home-search-row{margin-top:6px}
