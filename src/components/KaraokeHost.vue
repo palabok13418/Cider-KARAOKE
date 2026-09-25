@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import {
-  ciderNowPlaying, ciderPlay, ciderSearch, ciderLibrarySongs, demoLyrics, enhanceLyrics,
-  hostCode, signalUrl, Transport, visualFor, vocalRuntime, clientId,
-  type QueueSong, type Signal, type Song
+  ciderNowPlaying, ciderPlay, ciderSearch, enhanceLyrics, fetchLyricsForSong,
+  getPlaybackTime, hostCode, signalUrl, Transport, visualFor, vocalRuntime, clientId,
+  type LyricsSource, type QueueSong, type Signal, type Song
 } from "../karaoke";
 import { openPlayerControls, closePlayerControls } from "../player-window";
 
@@ -19,14 +19,16 @@ const karaokeStarted = ref(false);
 const playing = ref(false);
 const code = ref(hostCode());
 
-const libraryBusy = ref(true);
-const libraryMessage = ref("Loading your Apple Music library…");
+const catalogMessage = ref("Search the Apple Music catalog to add a song.");
 const status = ref("Host ready. Share the four-digit code.");
 const micCount = ref(0);
 const vocal = ref({mode:"fallback",message:"Starting local vocal remover…",loaded:false});
 const searchBusy = ref(false);
 const activeIndex = ref(0);
+const lyricsSource = ref<LyricsSource>("fallback");
+const lyricsBusy = ref(false);
 const transport = ref<Transport | null>(null);
+let lyricSyncFrame = 0;
 const peers = new Map<string, RTCPeerConnection>();
 let micAudio: HTMLAudioElement | null = null;
 const me = clientId();
@@ -39,9 +41,49 @@ function addToQueue(song: Song) {
 
 async function stageSong(song: Song, fetchVisual = true) {
   current.value = song;
-  lines.value = await enhanceLyrics(demoLyrics[song.id] || [{id:"fallback",original:"Ready to sing",language:"en",translation:"Ready to sing"}]);
   if (fetchVisual) visual.value = await visualFor(song);
   activeIndex.value = 0;
+}
+
+async function loadLyrics(song: Song) {
+  lyricsBusy.value = true;
+  try {
+    const result = await fetchLyricsForSong(song);
+    lines.value = await enhanceLyrics(result.lines);
+    lyricsSource.value = result.source;
+    activeIndex.value = 0;
+  } finally {
+    lyricsBusy.value = false;
+  }
+}
+
+function syncLyrics() {
+  if (!karaokeStarted.value) return;
+
+  if (lines.value.length) {
+    const hasTiming = lines.value.some((line) => typeof line.startTime === "number" && Number.isFinite(line.startTime));
+    if (hasTiming) {
+      const time = getPlaybackTime();
+      let nextIndex = 0;
+      for (let index = 0; index < lines.value.length; index += 1) {
+        const start = lines.value[index].startTime;
+        if (typeof start === "number" && Number.isFinite(start) && start <= time) nextIndex = index;
+      }
+      activeIndex.value = nextIndex;
+    }
+  }
+
+  lyricSyncFrame = requestAnimationFrame(syncLyrics);
+}
+
+function startLyricSync() {
+  cancelAnimationFrame(lyricSyncFrame);
+  lyricSyncFrame = requestAnimationFrame(syncLyrics);
+}
+
+function stopLyricSync() {
+  cancelAnimationFrame(lyricSyncFrame);
+  lyricSyncFrame = 0;
 }
 
 type PlayerControls = Awaited<ReturnType<typeof openPlayerControls>>;
@@ -88,6 +130,7 @@ async function handlePlayerCommand(type: "ready" | "toggle" | "previous" | "next
       const now = await ciderNowPlaying();
       if (now) {
         await stageSong(now);
+        await loadLyrics(now);
         await syncPlayerControls();
       }
     }, 300);
@@ -108,6 +151,7 @@ async function handlePlayerCommand(type: "ready" | "toggle" | "previous" | "next
       const now = await ciderNowPlaying();
       if (now) {
         await stageSong(now);
+        await loadLyrics(now);
         await syncPlayerControls();
       }
     }, 300);
@@ -141,6 +185,7 @@ async function startKaraoke() {
   karaokeStarted.value = true;
   const queued = queue.value.some((item) => item.id === target.id);
   await playSelected(target, queued);
+  startLyricSync();
   selectedSong.value = null;
 }
 
@@ -160,6 +205,8 @@ async function playSelected(song: Song, remove = false) {
   } else {
     visual.value = await visualFor(song);
   }
+
+  await loadLyrics(song);
   if (remove) {
     const index = queue.value.findIndex((item) => item.id === song.id);
     if (index >= 0) queue.value.splice(index,1);
@@ -169,10 +216,12 @@ async function playSelected(song: Song, remove = false) {
 
 async function search() {
   searchBusy.value = true;
-  libraryMessage.value = query.value.trim() ? "Searching your Apple Music library…" : "Loading your Apple Music library…";
+  catalogMessage.value = query.value.trim() ? "Searching Apple Music…" : "Enter a song, artist, or album.";
   const live = await ciderSearch(query.value);
   results.value = live;
-  libraryMessage.value = live.length ? `${live.length} song${live.length === 1 ? "" : "s"} found in your library.` : "No matching songs found in your Apple Music library.";
+  catalogMessage.value = live.length
+    ? String(live.length) + " Apple Music result" + (live.length === 1 ? "" : "s") + " found."
+    : "No matching Apple Music songs found.";
   searchBusy.value = false;
 }
 
@@ -220,25 +269,30 @@ async function answerOffer(peerId: string, sdp: RTCSessionDescriptionInit) {
   transport.value?.send({type:"webrtc-answer",peerId,sdp:answer});
 }
 
-async function loadLibrary() {
-  libraryBusy.value = true;
-  libraryMessage.value = "Loading your Apple Music library…";
-  const library = await ciderLibrarySongs(100);
-  results.value = library;
-  libraryMessage.value = library.length ? `${library.length} library songs loaded.` : "Your Apple Music library could not be loaded in Cider.";
-  libraryBusy.value = false;
+async function loadCatalog() {
+  const needle = query.value.trim();
+  if (!needle) {
+    catalogMessage.value = "Enter a song, artist, or album to search Apple Music.";
+    return;
+  }
+  await search();
 }
 
 onMounted(async () => {
   startTransport();
   vocal.value = await vocalRuntime();
-  await loadLibrary();
   const now = props.hostMode === "cider" ? await ciderNowPlaying() : null;
-  if (now) await stageSong(now);
-  else if (results.value[0]) await stageSong(results.value[0]);
+  if (now) {
+    await stageSong(now);
+    results.value = await ciderSearch(now.title);
+    catalogMessage.value = results.value.length
+      ? String(results.value.length) + " Apple Music result" + (results.value.length === 1 ? "" : "s") + " loaded."
+      : "Search Apple Music to choose another song.";
+  }
 });
 
 onBeforeUnmount(() => {
+  stopLyricSync();
   transport.value?.close();
   peers.forEach((peer) => peer.close());
   micAudio?.remove();
@@ -252,14 +306,14 @@ onBeforeUnmount(() => {
       <section class="main-stage">
         <section class="browser-drawer">
           <div class="browser-header">
-            <div><span class="eyebrow">APPLE MUSIC LIBRARY</span><h2>Choose a Song</h2></div>
-            <button class="catalog-pill library-refresh" type="button" @click="loadLibrary">{{ libraryBusy ? "Loading…" : "Refresh" }}</button>
+            <div><span class="eyebrow">APPLE MUSIC</span><h2>Choose a Song</h2></div>
+            <button class="catalog-pill library-refresh" type="button" @click="loadCatalog">{{ searchBusy ? "Searching…" : "Search" }}</button>
           </div>
           <div class="search-row">
-            <input v-model="query" class="search" placeholder="Search your library…" @keyup.enter="search" />
+            <input v-model="query" class="search" placeholder="Search Apple Music…" @keyup.enter="search" />
             <button class="primary-btn" @click="search">{{ searchBusy ? "Searching…" : "Search" }}</button>
           </div>
-          <div class="category-row"><span class="library-message">{{ libraryMessage }}</span></div>
+          <div class="category-row"><span class="library-message">{{ catalogMessage }}</span></div>
           <div class="song-list">
             <button v-for="song in results" :key="song.id" class="song-card" @click="addToQueue(song)">
               <img :src="song.artwork" :alt="song.title" />
@@ -295,6 +349,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else class="karaoke-live-stage">
+      <div class="live-code-pill" aria-label="Karaoke host code">{{ code }}</div>
       <section class="karaoke-visual-panel">
         <video
           v-if="visual && visual.kind !== 'static'"
@@ -319,11 +374,8 @@ onBeforeUnmount(() => {
       </section>
 
       <section class="karaoke-lyrics-panel">
-        <div class="karaoke-lyrics-top">
-          <span class="eyebrow">KARAOKE</span>
-          <div class="live-code">{{ code }}</div>
-        </div>
         <div class="karaoke-lyrics">
+          <div v-if="lyricsBusy && !lines.length" class="lyrics-loading">Loading lyrics…</div>
           <article v-for="(line,index) in lines" :key="line.id" class="lyric-line-live" :class="{active:index===activeIndex,past:index<activeIndex}">
             <div class="original">{{ line.original }}</div>
             <div v-if="line.pronunciation" class="pronunciation">{{ line.pronunciation }}</div>
