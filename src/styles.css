@@ -9,3 +9,31 @@
 .queue-panel{pointer-events:auto;border-left:1px solid var(--line);background:rgba(10,11,15,.96);padding:20px 14px}.host-code-mini{padding:4px 6px 18px;border-bottom:1px solid var(--line);margin-bottom:16px}.host-code-mini strong{display:block;font-size:28px;letter-spacing:.18em;line-height:1.15;margin-top:5px}.host-code-mini small{display:block;color:var(--muted);font-size:10px;margin-top:5px}.queue-actions{display:flex;align-items:center;gap:8px}.start-btn{min-height:34px;padding:0 13px;border-radius:10px;background:#fff;color:#0c0d11;font-weight:800;font-size:11px}.start-btn:disabled{opacity:.35;cursor:not-allowed}.queue-item.selected{border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.1)}.queue-title{display:flex;align-items:end;justify-content:space-between;margin-bottom:14px}.queue-title h3{margin:4px 0 0}.queue-count{width:26px;height:26px;display:grid;place-items:center;border-radius:8px;background:rgba(255,255,255,.08);font-size:11px}.queue-list{display:flex;flex-direction:column;gap:7px;overflow:auto;max-height:calc(100vh - 145px)}.queue-item{display:flex;gap:9px;align-items:center;width:100%;text-align:left;color:#fff;padding:8px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid transparent}.queue-item:hover{border-color:rgba(255,255,255,.13);background:rgba(255,255,255,.06)}.remove{color:rgba(255,255,255,.35);font-size:20px;padding:0 4px}.queue-empty{padding:30px 10px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}
 @media(max-width:920px){.feature-strip{grid-template-columns:1fr}.host-header{grid-template-columns:1fr auto}.host-status{display:none}.host-body{grid-template-columns:1fr}.queue-panel{display:none}}
 @media(max-width:650px){.landing-hero{margin-top:12vh}.landing-hero h1{font-size:54px}.browser-drawer{position:relative;left:auto;right:auto;bottom:auto;margin:18px;max-height:none}.visual-card,.stage-content{min-height:580px}.song-list{grid-template-columns:1fr}.stage-footer{flex-direction:column;align-items:stretch}.vocal-status{min-width:0}.join-card{padding:22px}}
+
+/* Live Karaoke stage */
+.pre-karaoke{min-height:100vh}
+.pre-karaoke .main-stage{min-height:100vh}
+.karaoke-live-stage{min-height:100vh;width:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);background:#090a0f}
+.karaoke-visual-panel{min-width:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:48px}
+.karaoke-visual-image,.karaoke-visual-video{display:block;width:min(78%,72vh);height:min(72%,72vh);max-width:720px;max-height:720px;object-fit:contain;border-radius:22px;box-shadow:0 24px 80px rgba(0,0,0,.38)}
+.karaoke-visual-empty{width:min(78%,72vh);aspect-ratio:1;border:1px solid var(--line);border-radius:22px;display:grid;place-items:center;color:var(--muted);font-size:12px}
+.karaoke-song-meta{display:flex;flex-direction:column;align-items:center;text-align:center;gap:5px;max-width:80%}
+.karaoke-song-meta strong{font-size:20px;line-height:1.2}
+.karaoke-song-meta span{font-size:12px;color:var(--muted)}
+.karaoke-lyrics-panel{min-width:0;min-height:100vh;border-left:1px solid var(--line);padding:56px clamp(34px,5vw,82px);display:flex;flex-direction:column;justify-content:center;background:rgba(9,10,15,.88)}
+.karaoke-lyrics-top{position:absolute;top:28px;right:34px;left:calc(50% + 34px);display:flex;align-items:center;justify-content:space-between;pointer-events:none}
+.live-code{font-size:12px;letter-spacing:.2em;color:rgba(255,255,255,.5)}
+.karaoke-lyrics{display:flex;flex-direction:column;gap:22px;max-width:820px}
+.lyric-line-live{opacity:.25;transform:translateY(8px);transition:opacity .35s ease,transform .35s ease}
+.lyric-line-live.active{opacity:1;transform:none}
+.lyric-line-live.past{opacity:.12}
+.lyric-line-live .original{font-size:clamp(34px,4vw,62px);font-weight:750;line-height:1.08;letter-spacing:-.045em}
+.lyric-line-live .pronunciation{font-size:clamp(16px,1.7vw,23px);margin-top:7px;color:#ffd5e4}
+.lyric-line-live .translation{font-size:clamp(14px,1.5vw,20px);margin-top:7px;color:rgba(255,255,255,.55)}
+@media(max-width:900px){
+  .karaoke-live-stage{grid-template-columns:1fr}
+  .karaoke-visual-panel{min-height:52vh;padding:34px 24px 10px}
+  .karaoke-visual-image,.karaoke-visual-video{width:min(74vw,48vh);height:min(74vw,48vh)}
+  .karaoke-lyrics-panel{min-height:48vh;border-left:0;border-top:1px solid var(--line);padding:26px 24px 40px}
+  .karaoke-lyrics-top{position:static;margin-bottom:24px}
+}
