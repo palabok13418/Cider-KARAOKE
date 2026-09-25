@@ -183,7 +183,7 @@ export async function ciderSearch(term: string): Promise<Song[]> {
     if (!response.ok) return [];
     const data = await response.json();
     const rows = Array.isArray(data?.data?.results?.songs?.data) ? data.data.results.songs.data : [];
-    return rows.map((row: any) => ({
+    const singRows = rows.filter((row: any) => row.attributes?.isVocalAttenuationAllowed !== false);\n    return singRows.map((row: any) => ({
       id:String(row.id),
       title:row.attributes?.name || "Untitled",
       artist:row.attributes?.artistName || "Unknown artist",
