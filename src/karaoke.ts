@@ -221,12 +221,17 @@ export async function ciderPlay(song: Song) {
   throw new Error("Cider Apple Music playback adapter unavailable");
 }
 
-export async function visualFor(song: Song) {
+export async function visualFor(song: Song): Promise<{kind:"animated"|"canvas";url:string}|null> {
   if (song.animatedArtwork) return {kind:"animated" as const,url:song.animatedArtwork};
   const provider = window.CiderSpotifyCanvas?.getCurrentCanvas;
-  if (provider) { try { const url = await provider(); if (url) return {kind:"canvas" as const,url}; } catch {} }
+  if (provider) {
+    try {
+      const url = await provider();
+      if (url) return {kind:"canvas" as const,url};
+    } catch {}
+  }
   if (song.canvas) return {kind:"canvas" as const,url:song.canvas};
-  return {kind:"static" as const,url:song.artwork};
+  return null;
 }
 
 export async function enhanceLyrics(lines: LyricLine[]) {
