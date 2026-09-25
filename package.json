@@ -1,23 +1,22 @@
 {
-  "name": "cider-karaoke-web",
+  "name": "cider-karaoke",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --config vite.web.config.ts",
-    "build": "vite build --config vite.web.config.ts",
-    "preview": "vite preview --config vite.web.config.ts",
-    "signaling": "node scripts/signaling.mjs"
+    "dev": "vite --config vite.config.ts",
+    "build": "vite build --config vite.config.ts",
+    "preview": "vite preview --config vite.config.ts"
   },
   "dependencies": {
     "vue": "^3.5.35"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.2.1",
-    "@types/node": "^20.14.9",
+    "@vitejs/plugin-vue": "^6.0.9",
     "typescript": "^5.2.2",
+    "unplugin-auto-import": "^0.17.8",
     "vite": "^8.0.16",
-    "vite-tsconfig-paths": "^4.3.2",
-    "ws": "^8.18.3"
-  },
-  "packageManager": "pnpm@10.17.1"
+    "vite-plugin-css-injected-by-js": "^3.5.2",
+    "yaml": "^2.4.5"
+  }
 }

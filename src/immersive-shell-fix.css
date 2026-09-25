@@ -1,0 +1,30 @@
+/* Keep Cider's native Immersive Mode controls above/through the plugin surface. */
+.host-shell {
+  pointer-events: none !important;
+  background: transparent !important;
+}
+
+.host-header {
+  pointer-events: none !important;
+  background: transparent !important;
+  border-bottom: 0 !important;
+  backdrop-filter: none !important;
+  padding-left: 140px !important;
+}
+
+.host-shell .visual-backdrop,
+.host-shell .visual-card,
+.host-shell .stage-content,
+.host-shell .visual-overlay,
+.host-shell .visual-media {
+  pointer-events: none !important;
+}
+
+.host-shell .browser-drawer,
+.host-shell .queue-panel,
+.host-shell .browser-drawer button,
+.host-shell .browser-drawer input,
+.host-shell .queue-panel button,
+.host-shell .queue-panel .remove {
+  pointer-events: auto !important;
+}

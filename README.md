@@ -1,43 +1,39 @@
-# Cider KARAOKE Web 🎤
+# Cider KARAOKE 🎤
 
-Standalone web shell for the Cider KARAOKE platform.
+Cider Immersive Mode karaoke plugin.
 
-## Host
-Website hosts must authenticate with a Cider account before hosting. The prototype contains a clearly labeled auth adapter and does not collect Cider passwords.
+This plugin uses the Apple Music account/session already active inside Cider. It does not add a separate sign-in flow.
 
-After host authentication:
-- Karaoke-only browser UI.
-- Apple Music Sing-style search/category browser.
-- Dedicated queue.
-- Full karaoke lyric presentation.
-- Four-digit host code.
-- Local translation/pronunciation adapters.
-- Animated artwork / Canvas fallback hook.
-- WebRTC microphone host transport.
+## Build the plugin
 
-## Microphone client
-Open the join mode on a phone or another browser:
+This ZIP is deliberately **Git-free**. It does not require `@ciderapp/pluginkit` from a GitHub URL. The small PluginKit v4 adapter used by this plugin is included locally under `src/vendor/`.
 
-    /?mode=join
+```bash
+npm install
+npm run build
+```
 
-Enter the host's four-digit code. After joining, the browser requests microphone access.
+The generated plugin files are written to `dist/`, including `plugin.js` and `plugin.yml`.
 
 ## Development
-The web shell uses port 3058.
 
-    pnpm install
-    pnpm dev
-    pnpm signaling
-    pnpm build
-    pnpm preview
+```bash
+npm run dev
+```
 
-For a real multi-device session, set:
+The development server uses Cider's plugin development port **3058**. Cider's normal RPC/WebView interface remains **10767**.
 
-    VITE_SIGNALING_URL=wss://your-signaling-host.example
+## Cider shell
 
-The four-digit code is a room join code, not authentication.
+The plugin adds a new Immersive Mode layout named **Karaoke**, with a dedicated karaoke queue, four-digit host code, karaoke lyrics, artwork/Canvas visual fallbacks, microphone session transport, and the lightweight WebNN/WebGPU vocal-removal runtime selector.
 
-## Production integrations
-The Cider login, production Apple Music authorization/catalog access, lyric fetching, local translation model, pronunciation model, and lightweight WebNN vocal-remover model are adapter points in this prototype.
+### Apple Music library
+The karaoke browser now reads the signed-in Apple Music library exposed by Cider's host-backed v3 API. Search is performed against the user's library, and selecting a library song adds it to the karaoke queue. Queue playback goes through Cider's Apple Music store instead of using a separate catalog player.
 
-No Cider desktop UI is included in this branch.
+The existing Spotify Canvas plugin is kept independent. Cider KARAOKE only calls its `window.CiderSpotifyCanvas.getCurrentCanvas()` integration hook when available.
+
+## Prototype limitations
+
+Local translation, pronunciation, vocal separation, WebRTC signaling, and the Spotify Canvas integration are still prototype-level pieces. No proprietary vocal-removal model weights are included in this package.
+
+The Karaoke surface deliberately leaves the upper-left area transparent and non-interactive so Cider's own Immersive Mode controls, including the layout selector, remain clickable.
