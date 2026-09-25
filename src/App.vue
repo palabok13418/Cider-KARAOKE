@@ -13,9 +13,9 @@ function go(next: "home"|"host"|"join") {
   mode.value = next;
   const query = new URLSearchParams(location.search);
   if (next === "home") query.delete("mode");
-  else query.set("mode",next);
+  else query.set("mode", next);
   const suffix = query.toString();
-  history.replaceState({}, "", location.pathname + (suffix ? "?"+suffix : ""));
+  history.replaceState({}, "", location.pathname + (suffix ? "?" + suffix : ""));
 }
 </script>
 
@@ -25,21 +25,23 @@ function go(next: "home"|"host"|"join") {
       <div class="landing-glow"></div>
       <header class="landing-nav">
         <div class="brandlock"><span class="brand-mark">🎤</span><strong>CIDER KARAOKE</strong></div>
-        <span class="version">PROTOTYPE 0.1</span>
+        <span class="version">WEB PROTOTYPE</span>
       </header>
+
       <section class="landing-hero">
-        <span class="eyebrow">A NEW KARAOKE LAYOUT FOR CIDER</span>
-        <h1>Turn Cider into a karaoke machine.</h1>
-        <p>Host on Cider, host on the web, or turn a phone into the microphone. One karaoke session, two host shells.</p>
+        <span class="eyebrow">STANDALONE KARAOKE HOST</span>
+        <h1>Bring the karaoke machine to the web.</h1>
+        <p>Host a karaoke session from a browser, then connect a phone as the microphone. No regular Cider interface is shown here.</p>
         <div class="landing-actions">
-          <button class="primary-btn big" @click="go('host')">Host on the web</button>
+          <button class="primary-btn big" @click="go('host')">Host a session</button>
           <button class="ghost-btn big" @click="go('join')">Join with microphone</button>
         </div>
       </section>
+
       <section class="feature-strip">
-        <div><span>01</span><strong>Apple Music Sing</strong><small>Browse and queue karaoke songs.</small></div>
-        <div><span>02</span><strong>Local lyrics</strong><small>On-device translation and supported-script pronunciation.</small></div>
-        <div><span>03</span><strong>Wireless mic</strong><small>Join with a four-digit host code.</small></div>
+        <div><span>01</span><strong>Cider account host gate</strong><small>Hosting starts after the supported Cider sign-in flow.</small></div>
+        <div><span>02</span><strong>Karaoke-only UI</strong><small>Browser, queue, lyrics, visuals, and the host code. Nothing else.</small></div>
+        <div><span>03</span><strong>Phone microphone</strong><small>Join with the four-digit code and grant browser mic access.</small></div>
       </section>
     </main>
 
