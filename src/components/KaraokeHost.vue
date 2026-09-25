@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import {
-  ciderNowPlaying, ciderPlay, ciderSearch, enhanceLyrics, fetchLyricsForSong,
+  ciderHomeSongs, ciderNowPlaying, ciderPlay, ciderSearch, enhanceLyrics, fetchLyricsForSong,
   getPlaybackTime, hostCode, signalUrl, Transport, visualFor, vocalRuntime, clientId,
   type LyricsSource, type QueueSong, type Signal, type Song
 } from "../karaoke";
@@ -19,11 +19,14 @@ const karaokeStarted = ref(false);
 const playing = ref(false);
 const code = ref(hostCode());
 
-const catalogMessage = ref("Search the Apple Music catalog to add a song.");
+const catalogMessage = ref("Loading your Apple Music home…");
 const status = ref("Host ready. Share the four-digit code.");
 const micCount = ref(0);
 const vocal = ref({mode:"fallback",message:"Starting local vocal remover…",loaded:false});
 const searchBusy = ref(false);
+const homeSongs = ref<Song[]>([]);
+const homeResources = ref<any[]>([]);
+const homeBusy = ref(false);
 const activeIndex = ref(0);
 const lyricsSource = ref<LyricsSource>("fallback");
 const lyricsXml = ref("");
@@ -227,6 +230,37 @@ async function search() {
   searchBusy.value = false;
 }
 
+async function loadAppleMusicHome() {
+  homeBusy.value = true;
+  catalogMessage.value = "Loading your Apple Music home…";
+  try {
+    const home = await ciderHomeSongs(40);
+    homeSongs.value = home.songs;
+    homeResources.value = home.resources;
+    catalogMessage.value = home.songs.length
+      ? "Personalized Apple Music recommendations from your signed-in Cider session."
+      : "Your Apple Music home is unavailable right now. Use Search to find a song.";
+  } catch {
+    homeSongs.value = [];
+    homeResources.value = [];
+    catalogMessage.value = "Your Apple Music home is unavailable right now. Use Search to find a song.";
+  } finally {
+    homeBusy.value = false;
+  }
+}
+
+async function selectHomeSong(song: Song) {
+  selectedSong.value = song;
+  await stageSong(song, true);
+  status.value = "Selected " + song.title + ". Press Start when you are ready.";
+}
+
+async function selectHomeResource(index: number) {
+  const song = homeSongs.value[index];
+  if (song) await selectHomeSong(song);
+}
+
+
 function removeQueue(id: string) { queue.value = queue.value.filter((song) => song.queueId !== id); }
 
 function onMessage(message: Signal) {
@@ -272,12 +306,7 @@ async function answerOffer(peerId: string, sdp: RTCSessionDescriptionInit) {
 }
 
 async function loadCatalog() {
-  const needle = query.value.trim();
-  if (!needle) {
-    catalogMessage.value = "Enter a song, artist, or album to search Apple Music.";
-    return;
-  }
-  await search();
+  await loadAppleMusicHome();
 }
 
 onMounted(async () => {
@@ -286,10 +315,9 @@ onMounted(async () => {
   const now = props.hostMode === "cider" ? await ciderNowPlaying() : null;
   if (now) {
     await stageSong(now);
-    results.value = await ciderSearch(now.title);
-    catalogMessage.value = results.value.length
-      ? String(results.value.length) + " Apple Music result" + (results.value.length === 1 ? "" : "s") + " loaded."
-      : "Search Apple Music to choose another song.";
+  }
+  if (props.hostMode === "cider") {
+    await loadAppleMusicHome();
   }
 });
 
@@ -306,25 +334,58 @@ onBeforeUnmount(() => {
   <main class="host-shell">
     <div v-if="!karaokeStarted" class="host-body pre-karaoke">
       <section class="main-stage">
-        <section class="browser-drawer">
+        <section class="browser-drawer apple-music-home-picker">
           <div class="browser-header">
-            <div><span class="eyebrow">APPLE MUSIC</span><h2>Choose a Song</h2></div>
-            <button class="catalog-pill library-refresh" type="button" @click="loadCatalog">{{ searchBusy ? "Searching…" : "Search" }}</button>
+            <div>
+              <span class="eyebrow">APPLE MUSIC</span>
+              <h2>Listen Now</h2>
+              <p class="home-subtitle">Your personalized Apple Music home from the account already signed in through Cider.</p>
+            </div>
+            <button class="catalog-pill library-refresh" type="button" @click="loadAppleMusicHome">{{ homeBusy ? "Loading…" : "Refresh" }}</button>
           </div>
-          <div class="search-row">
-            <input v-model="query" class="search" placeholder="Search Apple Music…" @keyup.enter="search" />
+
+          <div v-if="homeSongs.length" class="home-shelf">
+            <div class="home-shelf-header">
+              <div><span class="eyebrow">FOR YOU</span><h3>Recommended for You</h3></div>
+            </div>
+            <div class="home-shelf-row">
+              <button
+                v-for="(song,index) in homeSongs.slice(0,12)"
+                :key="song.id"
+                class="home-native-card"
+                type="button"
+                @click="selectHomeResource(index)"
+              >
+                <cider-media-item
+                  v-if="homeResources[index]"
+                  :item="homeResources[index]"
+                  :use-inline="true"
+                ></cider-media-item>
+                <span v-else class="home-fallback-card">
+                  <img :src="song.artwork" :alt="song.title" />
+                  <span class="song-copy"><strong>{{ song.title }}</strong><small>{{ song.artist }}</small></span>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div class="category-row">
+            <span class="library-message">{{ homeBusy ? "Loading your Apple Music home…" : catalogMessage }}</span>
+          </div>
+
+          <div class="search-row home-search-row">
+            <input v-model="query" class="search" placeholder="Search the full Apple Music catalog…" @keyup.enter="search" />
             <button class="primary-btn" @click="search">{{ searchBusy ? "Searching…" : "Search" }}</button>
           </div>
-          <div class="category-row"><span class="library-message">{{ catalogMessage }}</span></div>
-          <div class="song-list">
+
+          <div class="song-list" v-if="results.length">
             <button v-for="song in results" :key="song.id" class="song-card" @click="addToQueue(song)">
               <img :src="song.artwork" :alt="song.title" />
               <span class="song-copy"><strong>{{ song.title }}</strong><small>{{ song.artist }}</small></span>
               <span class="add-icon">＋</span>
             </button>
           </div>
-        </section>
-      </section>
+        </section>n>
 
       <aside class="queue-panel">
         <div class="host-code-mini">
