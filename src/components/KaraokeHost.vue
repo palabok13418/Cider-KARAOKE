@@ -152,7 +152,7 @@ onBeforeUnmount(() => { transport.value?.close(); peers.forEach((peer) => peer.c
           <div class="search-row"><input v-model="query" class="search" placeholder="Search your library…" @keyup.enter="search" /><button class="primary-btn" @click="search">{{ searchBusy ? "Searching…" : "Search" }}</button></div>
           <div class="category-row"><span class="library-message">{{ libraryMessage }}</span></div>
           <div class="song-list">
-            <button v-for="song in results" :key="song.id + (song.catalogId || '')" class="song-card" @click="addToQueue(song)"><img :src="song.artwork" :alt="song.title" /><span class="song-copy"><strong>{{ song.title }}</strong><small>{{ song.artist }}</small></span><span class="add-icon">＋</span></button>
+            <button v-for="song in results" :key="song.id" class="song-card" @click="addToQueue(song)"><img :src="song.artwork" :alt="song.title" /><span class="song-copy"><strong>{{ song.title }}</strong><small>{{ song.artist }}</small></span><span class="add-icon">＋</span></button>
           </div>
         </section>
       </section>
