@@ -25,7 +25,7 @@ The development server uses Cider's plugin development port **3058**. Cider's no
 
 ## Cider shell
 
-The plugin adds a new Immersive Mode layout named **Karaoke**, with a dedicated karaoke queue, four-digit host code, karaoke lyrics, artwork/Canvas visual fallbacks, microphone session transport, and the lightweight WebNN/WebGPU vocal-removal runtime selector.
+The plugin adds a new Immersive Mode layout named **Karaoke**, with a dedicated karaoke queue, four-digit host code, karaoke lyrics, artwork/Canvas visual fallbacks, phone session transport, and the lightweight WebNN/WebGPU vocal-removal runtime selector.
 
 ### Apple Music catalog
 The karaoke browser searches the full Apple Music catalog through Cider's authenticated host-backed v3 API. There is no separate Apple Music sign-in or developer token in the plugin. Selecting a catalog result adds it to the karaoke queue, and playback goes through Cider's Apple Music store.
@@ -37,6 +37,8 @@ The existing Spotify Canvas plugin is kept independent. Cider KARAOKE only calls
 Local translation, pronunciation, vocal separation, WebRTC signaling, and the Spotify Canvas integration are still prototype-level pieces. No proprietary vocal-removal model weights are included in this package.
 
 The Karaoke surface deliberately leaves the upper-left area transparent and non-interactive so Cider's own Immersive Mode controls, including the layout selector, remain clickable.
+
+Cider sign-in is required before the personalized Apple Music home and playback controls are enabled. KARAOKE does not ask the user to sign in a second time; it uses the Apple Music session already authenticated in Cider.
 
 ### Cider Sing lyric renderer
 KARAOKE keeps Cider's Apple Music Sing TTML intact and renders it through Cider's exposed `cider-simple-lyric-view` component. The plugin only adds a presentation layer around that renderer: its own translation engine and Korean/Japanese/Chinese pronunciation engine are shown alongside the active Cider-rendered line. This keeps Cider's per-line/per-word timing and Sing behavior as the rendering foundation instead of reimplementing the TTML renderer.
