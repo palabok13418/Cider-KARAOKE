@@ -198,6 +198,22 @@ function extractSongRows(payload: any): any[] {
   return [];
 }
 
+export async function ciderSessionReady(): Promise<boolean> {
+  const store = (window as any).__PLUGINSYS__?.Stores?.appleMusicStore;
+  if (!store) return false;
+
+  const v3 = ciderV3();
+  if (!v3) return false;
+
+  try {
+    const response = await v3("/v1/me/storefront");
+    const row = response?.data?.data?.[0] || response?.data?.[0] || response?.data;
+    return !!row?.id;
+  } catch {
+    return false;
+  }
+}
+
 async function ciderStorefront(): Promise<string> {
   const known = String((window as any).__PLUGINSYS__?.Stores?.appleMusicStore?.storefrontId || "").trim();
   if (known) return known;
@@ -247,6 +263,10 @@ function collectSongResources(value: any, seen = new Set<any>(), out: any[] = []
 }
 
 export async function ciderHomeSongs(limit = 40): Promise<{songs: Song[]; resources: any[]}> {
+  if (!(await ciderSessionReady())) {
+    throw new Error("Cider sign-in required");
+  }
+
   const response = await ciderMusicRequest(
     "/v1/me/recommendations?limit=" + Math.min(Math.max(limit, 1), 100)
   );
@@ -304,6 +324,7 @@ export async function ciderNowPlaying(): Promise<Song | null> {
 export async function ciderPlay(song: Song) {
   const store = (window as any).__PLUGINSYS__?.Stores?.appleMusicStore;
   if (!store) throw new Error("Cider Apple Music playback adapter unavailable");
+  if (!(await ciderSessionReady())) throw new Error("Cider sign-in required");
 
   if (store.ensurePlayer) {
     await store.ensurePlayer();
