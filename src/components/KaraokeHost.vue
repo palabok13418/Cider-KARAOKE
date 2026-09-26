@@ -223,12 +223,20 @@ async function playSelected(song: Song, remove = false) {
 async function search() {
   searchBusy.value = true;
   catalogMessage.value = query.value.trim() ? "Searching Apple Music…" : "Enter a song, artist, or album.";
-  const live = await ciderSearch(query.value);
-  results.value = live;
-  catalogMessage.value = live.length
-    ? String(live.length) + " Apple Music result" + (live.length === 1 ? "" : "s") + " found."
-    : "No matching Apple Music songs found.";
-  searchBusy.value = false;
+  try {
+    const live = await ciderSearch(query.value);
+    results.value = live;
+    catalogMessage.value = live.length
+      ? String(live.length) + " Apple Music result" + (live.length === 1 ? "" : "s") + " found."
+      : "No matching Apple Music songs found.";
+  } catch (error) {
+    results.value = [];
+    catalogMessage.value = error instanceof Error && error.message === "Cider sign-in required"
+      ? "Sign in to Cider first, then search Apple Music."
+      : "Apple Music search is unavailable right now.";
+  } finally {
+    searchBusy.value = false;
+  }
 }
 
 async function loadAppleMusicHome() {
@@ -405,7 +413,7 @@ onBeforeUnmount(() => {
         <div class="host-code-mini">
           <span class="eyebrow">HOST CODE</span>
           <strong>{{ code }}</strong>
-          <small>{{ micCount }} Connected phone{{ micCount === 1 ? "" : "s" }}</small>
+          <small>{{ micCount }} Connected phones</small>
         </div>
         <div class="queue-title">
           <div><span class="eyebrow">UP NEXT</span><h3>Karaoke Queue</h3></div>
