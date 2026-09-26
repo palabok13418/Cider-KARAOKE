@@ -284,6 +284,10 @@ export async function ciderHomeSongs(limit = 40): Promise<{songs: Song[]; resour
 }
 
 export async function ciderCatalogSearch(term: string): Promise<Song[]> {
+  if (!(await ciderSessionReady())) {
+    throw new Error("Cider sign-in required");
+  }
+
   const needle = term.trim();
   if (!needle) return [];
 
