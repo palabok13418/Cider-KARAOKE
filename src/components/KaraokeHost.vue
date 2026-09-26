@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import {
   ciderHomeSongs, ciderNowPlaying, ciderPlay, ciderSearch, enhanceLyrics, fetchLyricsForSong,
-  getPlaybackTime, hostCode, signalUrl, Transport, visualFor, vocalRuntime, clientId,
+  getPlaybackTime, hostCode, signalUrl, Transport, visualFor, vocalRuntime, clientId, ciderSessionReady,
   type LyricsSource, type QueueSong, type Signal, type Song
 } from "../karaoke";
 import { openPlayerControls, closePlayerControls } from "../player-window";
@@ -27,6 +27,7 @@ const searchBusy = ref(false);
 const homeSongs = ref<Song[]>([]);
 const homeResources = ref<any[]>([]);
 const homeBusy = ref(false);
+const ciderSignedIn = ref(false);
 const activeIndex = ref(0);
 const lyricsSource = ref<LyricsSource>("fallback");
 const lyricsXml = ref("");
@@ -232,18 +233,30 @@ async function search() {
 
 async function loadAppleMusicHome() {
   homeBusy.value = true;
-  catalogMessage.value = "Loading your Apple Music home…";
+  catalogMessage.value = "Checking your Cider sign-in…";
   try {
+    ciderSignedIn.value = await ciderSessionReady();
+    if (!ciderSignedIn.value) {
+      homeSongs.value = [];
+      homeResources.value = [];
+      catalogMessage.value = "Sign in to Cider first, then press Refresh to load your Apple Music home.";
+      return;
+    }
+
+    catalogMessage.value = "Loading your Apple Music home…";
     const home = await ciderHomeSongs(40);
     homeSongs.value = home.songs;
     homeResources.value = home.resources;
     catalogMessage.value = home.songs.length
       ? "Personalized Apple Music recommendations from your signed-in Cider session."
       : "Your Apple Music home is unavailable right now. Use Search to find a song.";
-  } catch {
+  } catch (error) {
+    ciderSignedIn.value = false;
     homeSongs.value = [];
     homeResources.value = [];
-    catalogMessage.value = "Your Apple Music home is unavailable right now. Use Search to find a song.";
+    catalogMessage.value = error instanceof Error && error.message === "Cider sign-in required"
+      ? "Sign in to Cider first, then press Refresh to load your Apple Music home."
+      : "Your Apple Music home is unavailable right now. Use Search to find a song.";
   } finally {
     homeBusy.value = false;
   }
@@ -341,7 +354,7 @@ onBeforeUnmount(() => {
               <h2>Listen Now</h2>
               <p class="home-subtitle">Your personalized Apple Music home from the account already signed in through Cider.</p>
             </div>
-            <button class="catalog-pill library-refresh" type="button" @click="loadAppleMusicHome">{{ homeBusy ? "Loading…" : "Refresh" }}</button>
+            <button class="catalog-pill library-refresh" type="button" @click="loadAppleMusicHome">{{ homeBusy ? "Loading…" : (ciderSignedIn ? "Refresh" : "Check Cider Sign-In") }}</button>
           </div>
 
           <div v-if="homeSongs.length" class="home-shelf">
@@ -392,7 +405,7 @@ onBeforeUnmount(() => {
         <div class="host-code-mini">
           <span class="eyebrow">HOST CODE</span>
           <strong>{{ code }}</strong>
-          <small>{{ micCount }} connected mic{{ micCount === 1 ? "" : "s" }}</small>
+          <small>{{ micCount }} Connected phone{{ micCount === 1 ? "" : "s" }}</small>
         </div>
         <div class="queue-title">
           <div><span class="eyebrow">UP NEXT</span><h3>Karaoke Queue</h3></div>
