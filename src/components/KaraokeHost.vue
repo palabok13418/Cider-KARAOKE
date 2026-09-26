@@ -385,7 +385,8 @@ onBeforeUnmount(() => {
               <span class="add-icon">＋</span>
             </button>
           </div>
-        </section>n>
+        </section>
+      </section>
 
       <aside class="queue-panel">
         <div class="host-code-mini">
