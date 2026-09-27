@@ -100,7 +100,7 @@ export function hostCode() { return String(Math.floor(1000 + Math.random() * 900
 export function signalUrl() { return (import.meta.env.VITE_SIGNALING_URL || window.CIDER_KARAOKE_SIGNALING_URL || "") as string; }
 
 function webApiBase() {
-  return String((import.meta as any).env?.VITE_MUS_API_BASE || (window as any).MUS_API_BASE || "https://mus-api.vercel.app").replace(/\\/+$/, "");
+  return String(import.meta.env.VITE_MUS_API_BASE || (globalThis as any).MUS_API_BASE || "https://mus-api.vercel.app").replace(/\\/+$/, "");
 }
 let webMusicPromise: Promise<any> | null = null;
 async function webMusicKit() {
