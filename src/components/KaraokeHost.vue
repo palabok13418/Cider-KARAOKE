@@ -199,7 +199,7 @@ async function startKaraoke() {
 async function playSelected(song: Song, remove = false) {
   await stageSong(song, false);
   status.value = "Now singing: " + song.title;
-  if (props.hostMode === "cider") {
+  if (props.hostMode === "cider" || props.hostMode === "web") {
     try {
       if (props.hostMode === "web") {
         await webApplePlay(song);
@@ -256,24 +256,33 @@ async function loadAppleMusicHome() {
     if (!ciderSignedIn.value) {
       homeSongs.value = [];
       homeResources.value = [];
-      catalogMessage.value = "Sign in to Cider first, then press Refresh to load your Apple Music home.";
+      catalogMessage.value = props.hostMode === "web" ? "Sign in with Apple Music first, then press Refresh to load your library." : "Sign in to Cider first, then press Refresh to load your Apple Music home.";
       return;
     }
 
     catalogMessage.value = "Loading your Apple Music home…";
-    const home = await ciderHomeSongs(40);
-    homeSongs.value = home.songs;
-    homeResources.value = home.resources;
-    catalogMessage.value = home.songs.length
-      ? "Personalized Apple Music recommendations from your signed-in Cider session."
-      : "Your Apple Music home is unavailable right now. Use Search to find a song.";
+    if (props.hostMode === "web") {
+      const songs = await webAppleLibrary(40);
+      homeSongs.value = songs;
+      homeResources.value = [];
+      catalogMessage.value = songs.length
+        ? "Your Apple Music library is ready."
+        : "Your Apple Music library is empty or unavailable. Use Search to find a song.";
+    } else {
+      const home = await ciderHomeSongs(40);
+      homeSongs.value = home.songs;
+      homeResources.value = home.resources;
+      catalogMessage.value = home.songs.length
+        ? "Personalized Apple Music recommendations from your signed-in Cider session."
+        : "Your Apple Music home is unavailable right now. Use Search to find a song.";
+    }
   } catch (error) {
     ciderSignedIn.value = false;
     homeSongs.value = [];
     homeResources.value = [];
     catalogMessage.value = error instanceof Error && error.message === "Cider sign-in required"
-      ? "Sign in to Cider first, then press Refresh to load your Apple Music home."
-      : "Your Apple Music home is unavailable right now. Use Search to find a song.";
+      ? (props.hostMode === "web" ? "Sign in with Apple Music first, then press Refresh to load your library." : "Sign in to Cider first, then press Refresh to load your Apple Music home.")
+      : (props.hostMode === "web" ? "Your Apple Music library is unavailable right now. Use Search to find a song." : "Your Apple Music home is unavailable right now. Use Search to find a song.");
   } finally {
     homeBusy.value = false;
   }
@@ -346,9 +355,7 @@ onMounted(async () => {
   if (now) {
     await stageSong(now);
   }
-  if (props.hostMode === "cider") {
-    await loadAppleMusicHome();
-  }
+  await loadAppleMusicHome();
 });
 
 onBeforeUnmount(() => {
