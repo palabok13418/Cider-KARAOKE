@@ -99,6 +99,87 @@ export function clientId() { return Math.random().toString(36).slice(2,10); }
 export function hostCode() { return String(Math.floor(1000 + Math.random() * 9000)); }
 export function signalUrl() { return (import.meta.env.VITE_SIGNALING_URL || window.CIDER_KARAOKE_SIGNALING_URL || "") as string; }
 
+function webApiBase() {
+  return String((import.meta as any).env?.VITE_MUS_API_BASE || (window as any).MUS_API_BASE || "https://mus-api.vercel.app").replace(/\\/+$/, "");
+}
+let webMusicPromise: Promise<any> | null = null;
+async function webMusicKit() {
+  if (webMusicPromise) return webMusicPromise;
+  webMusicPromise = (async () => {
+    if ((window as any).MusicKit) return (window as any).MusicKit;
+    await new Promise<void>((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://js-cdn.music.apple.com/musickit/v3/musickit.js";
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("MUSICKIT_JS_LOAD_FAILED"));
+      document.head.appendChild(s);
+    });
+    const kit = (window as any).MusicKit;
+    if (!kit) throw new Error("MUSICKIT_UNAVAILABLE");
+    const cfg = await fetch(webApiBase()+"/api/apple/config", {cache:"no-store"}).then(r => r.json());
+    if (!cfg?.developerToken) throw new Error(cfg?.error || "APPLE_MUSIC_DEVELOPER_TOKEN_MISSING");
+    await kit.configure({developerToken: cfg.developerToken, app:{name:"Cider KARAOKE Web",build:"2026.09.27"}});
+    return kit;
+  })().catch(error => { webMusicPromise = null; throw error; });
+  return webMusicPromise;
+}
+
+export async function webAppleAuthorize() {
+  const kit = await webMusicKit();
+  const music = kit.getInstance();
+  const token = String(await music.authorize() || "");
+  if (!token) throw new Error("Apple Music authorization was not completed");
+  try { sessionStorage.setItem("cider-karaoke-music-user-token", token); } catch {}
+  return music;
+}
+export async function webAppleSessionReady() {
+  try {
+    const music = await webMusicAuthorizeRestore();
+    return !!music?.musicUserToken;
+  } catch { return false; }
+}
+async function webMusicAuthorizeRestore() {
+  const kit = await webMusicKit();
+  const music = kit.getInstance();
+  try {
+    const saved = sessionStorage.getItem("cider-karaoke-music-user-token") || "";
+    if (saved) music.musicUserToken = saved;
+  } catch {}
+  return music;
+}
+function appleResultsToSongs(payload: any): Song[] {
+  const rows = payload?.results?.songs?.data || [];
+  return rows.map((row:any) => mapSong(row)).filter((song:Song) => song.id || song.catalogId);
+}
+export async function webAppleSearch(term: string): Promise<Song[]> {
+  const q = String(term || "").trim();
+  if (!q) return [];
+  const response = await fetch(webApiBase()+"/api/apple/search?"+new URLSearchParams({q,types:"songs",limit:"50"}).toString(), {cache:"no-store"});
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.error || "Apple Music search unavailable");
+  return appleResultsToSongs(payload);
+}
+export async function webAppleLibrary(limit=40): Promise<Song[]> {
+  const music = await webMusicAuthorizeRestore();
+  if (!music.musicUserToken) await webAppleAuthorize();
+  const token = String(music.musicUserToken || sessionStorage.getItem("cider-karaoke-music-user-token") || "");
+  if (!token) throw new Error("Apple Music sign-in required");
+  const response = await fetch(webApiBase()+"/api/apple/library?type=songs&limit="+Math.min(100,Math.max(1,limit))+"&offset=0", {headers:{"Music-User-Token":token},cache:"no-store"});
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.error || "Apple Music library unavailable");
+  return (payload?.data || []).map((row:any)=>mapSong(row)).filter((song:Song)=>song.id||song.catalogId);
+}
+export async function webApplePlay(song: Song) {
+  const music = await webMusicAuthorizeRestore();
+  if (!music.musicUserToken) await webAppleAuthorize();
+  const id = String(song.catalogId || song.id || "");
+  if (!id) throw new Error("Apple Music track ID missing");
+  if (typeof music.setQueue !== "function" || typeof music.play !== "function") throw new Error("MusicKit playback unavailable");
+  await music.setQueue({song:id});
+  await music.play();
+}
+
 export class Transport {
   private ws: WebSocket | null = null;
   private bc: BroadcastChannel | null = null;
