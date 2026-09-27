@@ -217,7 +217,11 @@ const Root={
       ws=new WebSocket(SIGNAL);
       ws.onopen=()=>{
         ws!.send(JSON.stringify({type:"hello",role,clientId:me} as Signal));
-        if(role==="mic"&&joinCode)ws!.send(JSON.stringify({type:"join-room",code:joinCode,clientId:me} as Signal));
+        if(role==="host"){
+          ws!.send(JSON.stringify({type:"room-created",code:code.value} as Signal));
+        }else if(joinCode){
+          ws!.send(JSON.stringify({type:"join-room",code:joinCode,clientId:me} as Signal));
+        }
       };
       ws.onclose=()=>{status.value="Peer server disconnected.";};
       ws.onerror=()=>{status.value="Peer server connection failed."};
@@ -263,7 +267,7 @@ const Root={
         }
         return;
       }
-      if(message.type==="join-accepted"){status.value="Joined room "+(message as any).code;return}
+      if(message.type==="join-accepted"){status.value="Joined room "+code.value;return}
       if(message.type==="peer-joined"){await makeOffer(message.peerId);return}
       if(message.type==="webrtc-offer"){await acceptOffer(message.peerId,message.sdp);return}
       if(message.type==="webrtc-answer"){const pc=peers.get(message.peerId);if(pc)await pc.setRemoteDescription(message.sdp);return}
