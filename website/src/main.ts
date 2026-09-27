@@ -4,6 +4,11 @@ import "../styles.css";
 
 const API = String(import.meta.env.VITE_MUS_API_BASE || "https://mus-api.vercel.app").replace(/\/+$/,"");
 const SIGNAL = String(import.meta.env.VITE_SIGNALING_URL || "").trim();
+function signalingUrl() {
+  const raw = SIGNAL || String((window as any).CIDER_KARAOKE_SIGNALING_URL || "").trim();
+  if (!raw) return "";
+  return raw.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:").replace(/\/+$/, "");
+}
 
 function normalize(row:any):Song {
   const a=row?.attributes||{};
@@ -212,9 +217,9 @@ const Root={
     }
 
     function connectTransport(role:"host"|"mic",joinCode?:string){
-      if(!SIGNAL){status.value="Peer server is not configured.";return}
+      if(!signalingUrl()){status.value="Peer server is not configured.";return}
       ws?.close();
-      ws=new WebSocket(SIGNAL);
+      ws=new WebSocket(signalingUrl());
       ws.onopen=()=>{
         ws!.send(JSON.stringify({type:"hello",role,clientId:me} as Signal));
         if(role==="host"){
