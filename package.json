@@ -7,9 +7,9 @@
     "dev": "vite --config vite.config.ts",
     "build": "vite build --config vite.config.ts",
     "preview": "vite preview --config vite.config.ts",
-    "dev:web": "vite --config vite.web.config.ts",
-    "build:web": "vite build --config vite.web.config.ts",
-    "preview:web": "vite preview --config vite.web.config.ts",
+    "dev:web": "vite --config website/vite.config.ts",
+    "build:web": "vite build --config website/vite.config.ts",
+    "preview:web": "vite preview --config website/vite.config.ts",
     "peer-server": "node server/signaling.mjs"
   },
   "dependencies": {
