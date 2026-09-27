@@ -478,7 +478,7 @@ onBeforeUnmount(() => {
         <div class="karaoke-lyrics">
           <div v-if="lyricsBusy && !lyricsXml" class="lyrics-loading">Loading Apple Music Sing lyrics…</div>
 
-          <div v-if="lyricsXml" class="cider-karaoke-ttml-shell">
+          <div v-if="lyricsXml && props.hostMode === 'cider'" class="cider-karaoke-ttml-shell">
             <cider-simple-lyric-view
               class="cider-karaoke-ttml-renderer"
               :lyrics-xml="lyricsXml"
