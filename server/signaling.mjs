@@ -5,11 +5,16 @@ import { randomUUID } from "node:crypto";
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 8787);
 const rooms = new Map();
+const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
+const HEARTBEAT_MS = 25000;
 
 function send(ws, message) {
   try { if (ws.readyState === 1) ws.send(JSON.stringify(message)); } catch {}
 }
 function roomFor(code) { return rooms.get(String(code || "").trim()); }
+function touch(room) { if (room) room.updatedAt = Date.now(); }
+function cleanupRooms() { const now = Date.now(); for (const [code, room] of rooms) { if (now - Number(room.updatedAt || 0) > ROOM_TTL_MS) { for (const peer of room.clients.values()) send(peer.ws, {type:"room-error",message:"Karaoke room expired."}); rooms.delete(code); } } }
+setInterval(cleanupRooms, 60_000).unref();
 function removeClient(client) {
   const room = client.roomCode ? roomFor(client.roomCode) : null;
   if (!room) return;
@@ -45,7 +50,8 @@ wss.on("connection",(ws)=>{
       if (!/^\d{4}$/.test(code)) return send(ws,{type:"room-error",message:"Invalid room code."});
       const existing=roomFor(code);
       if (existing && existing.hostId !== client.id) return send(ws,{type:"room-error",message:"That room code is already in use."});
-      const room=existing || {hostId:client.id,clients:new Map()};
+      const room=existing || {hostId:client.id,clients:new Map(),updatedAt:Date.now()};
+      touch(room);
       room.clients.set(client.id,client);
       rooms.set(code,room);
       client.roomCode=code;
@@ -63,6 +69,7 @@ wss.on("connection",(ws)=>{
       return;
     }
     if (/^webrtc-/.test(String(msg.type||""))) {
+      touch(client.roomCode ? roomFor(client.roomCode) : null);
       const room=client.roomCode ? roomFor(client.roomCode) : null;
       if (!room) return;
       const target=room.clients.get(String(msg.peerId||""));
@@ -77,4 +84,5 @@ wss.on("connection",(ws)=>{
   });
   ws.on("close",()=>removeClient(client));
 });
+setInterval(() => { for (const room of rooms.values()) for (const client of room.clients.values()) { try { if (client.ws.readyState === 1) client.ws.ping(); } catch {} } }, HEARTBEAT_MS).unref();
 server.listen(port,host,()=>console.log("Cider KARAOKE peer server listening on "+host+":"+port));
