@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, ref } from "vue";
 import { Transport, clientId, hostCode, parseTTML, type LyricLine, type Song } from "../src/karaoke";
 
 const CIDER_BASE = "http://127.0.0.1:10767";
+const MUS_API_BASE = String((import.meta as any).env?.VITE_MUS_API_BASE || "https://mus-api.vercel.app").replace(/\\/+$/, "");
+const mus = (path: string) => MUS_API_BASE + path;
 const role = ref<"host"|"mic">("host");
 const ciderToken = ref("");
 const ciderConnected = ref(false);
@@ -96,7 +98,7 @@ async function connectAppleMusic() {
   status.value = "Opening Apple Music authorization…";
   try {
     await loadMusicKitScript();
-    const cfg = await fetch("/api/apple/config").then((r) => r.json());
+    const cfg = await fetch(mus("/api/apple/config")).then((r) => r.json());
     if (!cfg?.developerToken) throw new Error("Apple Music developer token is not configured in Mus-API.");
     const kit = (window as any).MusicKit;
     await kit.configure({ developerToken: cfg.developerToken, app: { name: "Cider Karaoke Web", build: "2026.09.27" } });
@@ -113,7 +115,7 @@ async function search() {
   if (!query.value.trim()) return;
   status.value = "Searching Apple Music…";
   try {
-    const body = await fetch("/api/apple/search?q=" + encodeURIComponent(query.value.trim()) + "&types=songs&limit=30").then((r) => r.json());
+    const body = await fetch(mus("/api/apple/search?q=" + encodeURIComponent(query.value.trim()) + "&types=songs&limit=30").then((r) => r.json());
     const rows = Array.isArray(body?.results?.songs?.data) ? body.results.songs.data : [];
     results.value = rows.map(normalize);
     status.value = "Found " + results.value.length + " songs.";
@@ -128,7 +130,7 @@ function add(song: Song) {
 
 async function loadLyrics(song: Song) {
   try {
-    const body = await fetch("/api/apple/lyrics-ttml?id=" + encodeURIComponent(song.catalogId || song.id) + "&format=json").then((r) => r.json());
+    const body = await fetch(mus("/api/apple/lyrics-ttml?id=" + encodeURIComponent(song.catalogId || song.id) + "&format=json").then((r) => r.json());
     lyrics.value = parseTTML(String(body?.ttml || body?.lyrics || ""));
     activeLyric.value = 0;
   } catch {
