@@ -1,8 +1,8 @@
 import http from "node:http";
-import { WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 const port=Number(process.env.PORT||8787), host=process.env.HOST||"0.0.0.0";
 const rooms=new Map();
-function send(ws,m){if(ws.readyState===ws.OPEN)ws.send(JSON.stringify(m));}
+function send(ws,m){if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(m));}
 function leave(ws){const code=ws.room;if(!code)return;const peers=rooms.get(code);if(!peers)return;peers.delete(ws);if(ws.clientId)for(const p of peers)send(p,{type:"peer-left",peerId:ws.clientId});if(!peers.size)rooms.delete(code);ws.room="";}
 function join(ws,code){code=String(code||"").trim().slice(0,32);if(!code)return false;leave(ws);let peers=rooms.get(code);if(!peers){peers=new Set();rooms.set(code,peers);}ws.room=code;peers.add(ws);return true;}
 function fanout(ws,m){const peers=rooms.get(ws.room);if(!peers)return;for(const p of peers)if(p!==ws)send(p,m);}
