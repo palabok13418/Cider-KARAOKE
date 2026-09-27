@@ -23,6 +23,8 @@ function normalize(row:any):Song {
   };
 }
 
+function esc(s:string){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]||m))}
+
 const Root={
   setup(){
     const connected=ref(false),busy=ref(false),query=ref(""),results=ref<Song[]>([]);
@@ -186,7 +188,7 @@ const Root={
         try{micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});micConnected.value=true}
         catch{status.value="Microphone permission was denied.";return}
       }
-      roomCode.value=value;
+      code.value=value;
       connectTransport("mic",value);
     }
 
@@ -223,7 +225,7 @@ const Root={
     }
 
     async function handleSignal(message:Signal){
-      if(message.type==="room-created"){roomCode.value=message.code;status.value="Room "+message.code+" is ready.";return}
+      if(message.type==="room-created"){code.value=message.code;status.value="Room "+message.code+" is ready.";return}
       if(message.type==="join-accepted"){status.value="Joined room "+(message as any).code;return}
       if(message.type==="peer-joined"){await makeOffer(message.peerId);return}
       if(message.type==="webrtc-offer"){await acceptOffer(message.peerId,message.sdp);return}
