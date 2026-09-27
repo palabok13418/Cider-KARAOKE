@@ -326,7 +326,7 @@ function startTransport() {
 }
 
 async function preparePeer(peerId: string) {
-  const peer = new RTCPeerConnection();
+  const peer = new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:stun.cloudflare.com:3478"}]});
   peers.set(peerId,peer);
   peer.ontrack = (event) => {
     if (!micAudio) { micAudio = document.createElement("audio"); micAudio.autoplay = true; micAudio.style.display = "none"; document.body.appendChild(micAudio); }
