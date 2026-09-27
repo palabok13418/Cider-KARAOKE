@@ -2,8 +2,5 @@
   "buildCommand": "npm run web:build",
   "outputDirectory": "dist-web",
   "installCommand": "npm install",
-  "framework": null,
-  "rewrites": [
-    { "source": "/peer", "destination": "https://REPLACE_WITH_PEER_HOST/peer" }
-  ]
+  "framework": null
 }
