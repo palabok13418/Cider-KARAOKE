@@ -13,7 +13,7 @@
     "peer:start": "node peer-server/server.mjs",
     "peer-server": "node server/peer-server.mjs",
     "web:dev": "vite --config web/vite.config.ts",
-    "web:build": "vite build --config web/vite.config.ts",
+    "web:build": "npm run build:web",
     "peer": "node server/signaling.mjs"
   },
   "dependencies": {
