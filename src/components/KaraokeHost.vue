@@ -174,19 +174,23 @@ async function startKaraoke() {
 
   await stageSong(target, false);
 
-  try {
-    playerControls = await openPlayerControls(
-      {
-        title: target.title,
-        artist: target.artist,
-        artwork: target.artwork,
-        playing: false,
-      },
-      handlePlayerCommand,
-    );
-  } catch {
-    status.value = "The separate player window could not be opened.";
-    return;
+  if (props.hostMode === "cider") {
+    try {
+      playerControls = await openPlayerControls(
+        {
+          title: target.title,
+          artist: target.artist,
+          artwork: target.artwork,
+          playing: false,
+        },
+        handlePlayerCommand,
+      );
+    } catch {
+      status.value = "The separate player window could not be opened.";
+      return;
+    }
+  } else {
+    playerControls = null;
   }
 
   karaokeStarted.value = true;
@@ -248,7 +252,7 @@ async function search() {
 
 async function loadAppleMusicHome() {
   homeBusy.value = true;
-  catalogMessage.value = "Checking your Cider sign-in…";
+  catalogMessage.value = props.hostMode === "web" ? "Checking your Apple Music connection…" : "Checking your Cider sign-in…";
   try {
     ciderSignedIn.value = props.hostMode === "web"
       ? await webAppleSessionReady()
