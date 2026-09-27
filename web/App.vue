@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import { Transport, clientId, hostCode, parseTTML, type LyricLine, type Song } from "../src/karaoke";
 
-const CIDER_BASE = "http://127.0.0.1:10767";
+const CIDER_BASE = "http://localhost:10767";
 const MUS_API_BASE = String((import.meta as any).env?.VITE_MUS_API_BASE || "https://mus-api.vercel.app").replace(/\/+$/, "");
 const mus = (path: string) => MUS_API_BASE + path;
 const role = ref<"host"|"mic">("host");
