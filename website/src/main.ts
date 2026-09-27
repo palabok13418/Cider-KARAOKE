@@ -31,6 +31,7 @@ const Root={
     const queue=ref<QueueSong[]>([]),current=ref<Song|null>(null),lyrics=ref<any[]>([]);
     const lyricsBusy=ref(false),live=ref(false),status=ref("Connect Apple Music to begin.");
     const code=ref(hostCode()),me=clientId(),isHost=ref(false),micConnected=ref(false);
+    const pendingRoomSong=ref<Song|null>(null);
     let ws:WebSocket|null=null;
     let music:any=null;
     const peers=new Map<string,RTCPeerConnection>();
@@ -50,7 +51,22 @@ const Root={
         if(!cfg?.developerToken)throw new Error(cfg?.error||"Mus-API Apple Music is not configured.");
         await (window as any).MusicKit.configure({developerToken:cfg.developerToken,app:{name:"Cider Karaoke Web",build:"0.1.0"}});
         music=(window as any).MusicKit.getInstance();
-        await music.authorize();
+        const authorized=await music.authorize();
+        const musicUserToken=String(authorized||music?.musicUserToken||music?.userToken||"").trim();
+        if(musicUserToken){
+          try{sessionStorage.setItem("musaudio_music_user_token_v1",musicUserToken)}catch{}
+          try{
+            await fetch(API+"/api/apple/session",{
+              method:"POST",
+              headers:{"content-type":"application/json",accept:"application/json"},
+              body:JSON.stringify({
+                developerToken:cfg.developerToken,
+                musicUserToken,
+                storefront:String(music?.storefrontId||"us").trim()||"us"
+              })
+            });
+          }catch{}
+        }
         connected.value=true;
         status.value="Apple Music connected.";
       }catch(e:any){status.value=e?.message||"Apple Music connection failed."}
@@ -157,7 +173,7 @@ const Root={
       return line.spans.map((sp:any)=>`<span class="lyric-word" data-word="${esc(sp.text)}">${[...sp.text].map((ch:string)=>`<span class="lyric-letter" style="--p:0">${ch===" "?"&nbsp;":esc(ch)}</span>`).join("")}</span>`).join(" ");
     }
 
-    async function playSong(song:Song){
+    async function playSong(song:Song,announce=true){
       current.value=song;
       await loadLyrics(song);
       try{
@@ -168,7 +184,10 @@ const Root={
         await music?.play?.();
         status.value="Now singing: "+song.title;
       }catch(e:any){status.value=e?.message||"Apple Music playback failed."}
-      broadcast({type:"room-song",song} as Signal);
+      if(announce){
+        if(ws?.readyState===WebSocket.OPEN) broadcast({type:"room-song",song} as Signal);
+        else if(isHost.value) pendingRoomSong.value=song;
+      }
       live.value=true;
     }
 
@@ -196,8 +215,11 @@ const Root={
       if(!SIGNAL){status.value="Peer server is not configured.";return}
       ws?.close();
       ws=new WebSocket(SIGNAL);
-      ws.onopen=()=>{ws!.send(JSON.stringify({type:"hello",role,clientId:me,code:role==="host"?undefined:undefined} as Signal));if(role==="mic"&&joinCode)ws!.send(JSON.stringify({type:"join-room",code:joinCode,clientId:me} as Signal))};
-      ws.onclose=()=>{connected.value=connected.value;};
+      ws.onopen=()=>{
+        ws!.send(JSON.stringify({type:"hello",role,clientId:me} as Signal));
+        if(role==="mic"&&joinCode)ws!.send(JSON.stringify({type:"join-room",code:joinCode,clientId:me} as Signal));
+      };
+      ws.onclose=()=>{status.value="Peer server disconnected.";};
       ws.onerror=()=>{status.value="Peer server connection failed."};
       ws.onmessage=e=>{try{handleSignal(JSON.parse(e.data))}catch{}};
     }
@@ -205,10 +227,16 @@ const Root={
     function broadcast(message:Signal){if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(message))}
 
     async function makeOffer(peerId:string){
-      if(!isHost.value||!micStream)return;
+      if(!isHost.value)return;
       const pc=new RTCPeerConnection({iceServers:[{urls:["stun:stun.l.google.com:19302"]}]});
       peers.set(peerId,pc);
-      micStream.getTracks().forEach(t=>pc.addTrack(t,micStream!));
+      const transceiver=pc.addTransceiver("audio",{direction:micStream?.getAudioTracks().length?"sendrecv":"recvonly"});
+      if(micStream?.getAudioTracks().length) await transceiver.sender.replaceTrack(micStream.getAudioTracks()[0]);
+      pc.ontrack=e=>{
+        const existing=document.getElementById("remote-mic-"+peerId) as HTMLAudioElement|null;
+        if(existing) existing.srcObject=e.streams[0];
+        else { const a=document.createElement("audio"); a.autoplay=true; a.srcObject=e.streams[0]; a.id="remote-mic-"+peerId; document.body.appendChild(a); }
+      };
       pc.onicecandidate=e=>{if(e.candidate)broadcast({type:"webrtc-ice",peerId,candidate:e.candidate.toJSON()})};
       const offer=await pc.createOffer();await pc.setLocalDescription(offer);
       broadcast({type:"webrtc-offer",peerId,sdp:offer});
@@ -218,20 +246,29 @@ const Root={
       if(isHost.value)return;
       const pc=peers.get(peerId)||new RTCPeerConnection({iceServers:[{urls:["stun:stun.l.google.com:19302"]}]});
       peers.set(peerId,pc);
-      pc.ontrack=e=>{const a=document.createElement("audio");a.autoplay=true;a.srcObject=e.streams[0];a.id="remote-mic-"+peerId;document.body.appendChild(a)};
+      if(micStream?.getAudioTracks().length) micStream.getTracks().forEach(t=>pc.addTrack(t,micStream!));
       pc.onicecandidate=e=>{if(e.candidate)broadcast({type:"webrtc-ice",peerId,candidate:e.candidate.toJSON()})};
       await pc.setRemoteDescription(sdp);const answer=await pc.createAnswer();await pc.setLocalDescription(answer);
       broadcast({type:"webrtc-answer",peerId,sdp:answer});
     }
 
     async function handleSignal(message:Signal){
-      if(message.type==="room-created"){code.value=message.code;status.value="Room "+message.code+" is ready.";return}
+      if(message.type==="room-created"){
+        code.value=message.code;
+        status.value="Room "+message.code+" is ready.";
+        if(isHost.value&&pendingRoomSong.value){
+          const song=pendingRoomSong.value;
+          pendingRoomSong.value=null;
+          broadcast({type:"room-song",song} as Signal);
+        }
+        return;
+      }
       if(message.type==="join-accepted"){status.value="Joined room "+(message as any).code;return}
       if(message.type==="peer-joined"){await makeOffer(message.peerId);return}
       if(message.type==="webrtc-offer"){await acceptOffer(message.peerId,message.sdp);return}
       if(message.type==="webrtc-answer"){const pc=peers.get(message.peerId);if(pc)await pc.setRemoteDescription(message.sdp);return}
       if(message.type==="webrtc-ice"){const pc=peers.get(message.peerId);if(pc&&message.candidate)await pc.addIceCandidate(message.candidate).catch(()=>{});return}
-      if(message.type==="room-song"&&!isHost.value){const song=(message as any).song as Song;if(song){current.value=song;live.value=true;await loadLyrics(song);await playSong(song)}}
+      if(message.type==="room-song"&&!isHost.value){const song=(message as any).song as Song;if(song){await playSong(song,false)}}
       if(message.type==="host-promoted"){status.value="Host promoted for room "+message.code}
       if(message.type==="room-error"){status.value=message.message}
     }
