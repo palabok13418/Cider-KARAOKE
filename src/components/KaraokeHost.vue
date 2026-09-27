@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import {
   ciderHomeSongs, ciderNowPlaying, ciderPlay, ciderSearch, enhanceLyrics, fetchLyricsForSong,
   getPlaybackTime, hostCode, signalUrl, Transport, visualFor, vocalRuntime, clientId, ciderSessionReady,
+  webAppleSearch, webAppleLibrary, webApplePlay, webAppleSessionReady,
   type LyricsSource, type QueueSong, type Signal, type Song
 } from "../karaoke";
 import { openPlayerControls, closePlayerControls } from "../player-window";
@@ -200,7 +201,11 @@ async function playSelected(song: Song, remove = false) {
   status.value = "Now singing: " + song.title;
   if (props.hostMode === "cider") {
     try {
-      await ciderPlay(song);
+      if (props.hostMode === "web") {
+        await webApplePlay(song);
+      } else {
+        await ciderPlay(song);
+      }
       playing.value = true;
       visual.value = await visualFor(song);
     } catch {
@@ -224,7 +229,9 @@ async function search() {
   searchBusy.value = true;
   catalogMessage.value = query.value.trim() ? "Searching Apple Music…" : "Enter a song, artist, or album.";
   try {
-    const live = await ciderSearch(query.value);
+    const live = props.hostMode === "web"
+      ? await webAppleSearch(query.value)
+      : await ciderSearch(query.value);
     results.value = live;
     catalogMessage.value = live.length
       ? String(live.length) + " Apple Music result" + (live.length === 1 ? "" : "s") + " found."
@@ -243,7 +250,9 @@ async function loadAppleMusicHome() {
   homeBusy.value = true;
   catalogMessage.value = "Checking your Cider sign-in…";
   try {
-    ciderSignedIn.value = await ciderSessionReady();
+    ciderSignedIn.value = props.hostMode === "web"
+      ? await webAppleSessionReady()
+      : await ciderSessionReady();
     if (!ciderSignedIn.value) {
       homeSongs.value = [];
       homeResources.value = [];
