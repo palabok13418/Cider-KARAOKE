@@ -1,3 +1,12 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
-export default defineConfig({plugins:[vue()],root:".",build:{outDir:"dist-web",emptyOutDir:true,target:"es2020"},server:{port:4170,host:"127.0.0.1"}});
+import { fileURLToPath } from "node:url";
+
+const webRoot = fileURLToPath(new URL("./", import.meta.url));
+
+export default defineConfig({
+  root: webRoot,
+  plugins: [vue()],
+  build: { outDir: fileURLToPath(new URL("../dist-web/", import.meta.url)), emptyOutDir: true, target: "es2020" },
+  server: { port: 4170, host: "127.0.0.1" }
+});
