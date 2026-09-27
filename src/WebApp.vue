@@ -14,7 +14,7 @@ let localStream: MediaStream | null = null;
 let hostId = "";
 
 function signalingUrl() {
-  const configured = String((import.meta as any).env?.VITE_SIGNALING_URL || (window as any).CIDER_KARAOKE_SIGNALING_URL || "").trim();
+  const configured = String(import.meta.env.VITE_SIGNALING_URL || (globalThis as any).CIDER_KARAOKE_SIGNALING_URL || "").trim();
   if (configured) return configured;
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   return proto + "//" + window.location.host + "/peer";
@@ -54,7 +54,7 @@ async function joinRoom() {
       video: false
     });
 
-    const pc = new RTCPeerConnection();
+    const pc = new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:stun.cloudflare.com:3478"}]});
     peer = pc;
     localStream.getTracks().forEach((track) => pc.addTrack(track, localStream!));
 
